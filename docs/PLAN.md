@@ -1,5 +1,9 @@
 # QOS — Gap Analysis & Delivery Plan
 
+Historical phased plan. For the reconciled **2026-10-31** implementation status, dependencies
+and canonical issues, use [STATUS_AND_BACKLOG.md](STATUS_AND_BACKLOG.md) and #39. Early gap
+descriptions below are starting-point snapshots, not current support claims.
+
 Status snapshot (2026-06-26). This is the working roadmap from "a kernel that boots + a shell"
 to "a real, usable, graphical OS". It interleaves the **interactive GUI** track (visible,
 motivating) with the **OS-foundation** track (what actually makes it an operating system).

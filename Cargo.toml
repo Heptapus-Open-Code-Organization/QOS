@@ -10,6 +10,7 @@ members = [
   # "crates/qos-pybridge",   # Disabled: Python bridge, uses std
   "crates/qos-os-kernel",    # Main kernel (no_std)
   "crates/qos-image",        # Bootable BIOS+UEFI image builder (bootloader 0.11). See ADR-0014.
+  "crates/qos-verify",       # Host-side UEFI verification runner (std, no dependencies).
   # "crates/qos-os-xtask",   # Disabled: uses std, we'll use bootimage directly
   # "crates/qos-userdemo",   # Disabled: linker error with _start symbol
 ]

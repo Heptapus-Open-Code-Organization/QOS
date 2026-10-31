@@ -28,6 +28,7 @@ pub mod result;
 pub mod scheduler;
 pub mod sim;
 pub mod store;
+pub mod transpile;
 
 pub use backend::{
     BackendCapabilities, BackendError, BackendJobId, BackendManager, BackendResult,
@@ -42,6 +43,7 @@ pub use manager::JobManager;
 pub use result::QResult;
 pub use scheduler::{FifoScheduler, Scheduler};
 pub use store::JobStore;
+pub use transpile::{route_circuit, RoutingResult};
 
 // Re-export the shared ABI vocabulary so downstream crates use one set of types.
 pub use qos_abi::{IrFormat, JobHandle, JobState, ProcSpec, ResultStatus};

@@ -14,6 +14,11 @@ standards (see [WP-13](docs/wp/WP-13-quantum-safe-security.md)).
 > See [docs/MASTERPLAN.md](docs/MASTERPLAN.md) for the roadmap, [docs/wp/](docs/wp/) for the work
 > packages, and [docs/adr/](docs/adr/) for the architecture decisions.
 
+The dated [hardware/software implementation baseline](docs/STATUS_AND_BACKLOG.md) distinguishes
+host tests, prior QEMU records and unverified physical support, and links the remaining work to
+[#39](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/39). Ring-3 demos exist, while
+the built-in desktop apps still run inside the kernel; ordinary app isolation is unfinished.
+
 ## Screenshots
 
 | Modern desktop | Quantum Lab | QASM Studio IDE |
@@ -88,12 +93,17 @@ cargo os-build              # = cargo build -p os --target x86_64-unknown-none -
 # Build a bootable UEFI image (written to dist/qos-uefi.img)
 cargo image
 
-# Headless verification (boots, runs the Ring-3 quantum demo, exits with a status code)
+# Strict UEFI smoke (framebuffer, W^X, desktop frame, real Bell simulation)
 cargo os-verify
 ```
 
 A Docker-based build is also available (see `Dockerfile` / `docker-compose.yml` and
 [DOCKER.md](DOCKER.md)) for a clean, reproducible Linux toolchain.
+
+`cargo os-verify` requires QEMU and a matching OVMF/edk2 code/vars pair. It builds a separate
+verification image, rejects timeout/guest faults/missing completion markers, and saves logs
+under `target/qos-verify/`. See [WP-14](docs/wp/WP-14-verification-gates.md) for configuration,
+the exact checks and the remaining process/storage/input coverage.
 
 ## Running on real hardware and VMs
 

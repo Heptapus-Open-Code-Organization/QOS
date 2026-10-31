@@ -6,6 +6,9 @@
   QHAL + provider-protocol decisions
 - Commits: (appended as delivered)
 
+Tracking: #12 (provider path), #42 (shared engine/QHAL correctness and frontend integration).
+Real provider traffic remains gated by #5 networking and #19 secure channels/secrets.
+
 ## Goal
 
 Let QOS run circuits on **real external quantum providers** (IBM Quantum, IonQ, etc.) through a
@@ -40,6 +43,12 @@ slice 3+); the local backend keeps working with zero network; secrets never logg
 updated with evidence.
 
 ## Notes & gaps
+
+- **Portable preparation increment (2026-10-31; ADR-0008).** `qos-core` now has tested
+  connectivity routing for CX/CZ/SWAP, routing-overhead reporting, and QHAL preparation plus
+  input/capability validation. The portable local backend runs through `prepare`. This advances
+  the transpilation prerequisite for slices 1/4; those slices remain incomplete because the
+  kernel IDE/Lab/Terminal still use their separate engine and no remote provider is connected.
 
 - Hard dependency: WP-10 networking (NIC driver, DHCP, TCP, HTTP; TLS decision in its slice 4).
 - Security: provider tokens are secrets — store on disk with restricted surface, never print;

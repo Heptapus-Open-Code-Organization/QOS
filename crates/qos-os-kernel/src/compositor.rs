@@ -3146,11 +3146,22 @@ fn fmt_countdown(buf: &mut [u8; 48], sec: i32) -> &str {
     core::str::from_utf8(&buf[..n]).unwrap_or("Starting...")
 }
 
-/// Run the interactive modern desktop (opt-in via the `modern` shell command, WP-05 step 4).
-/// Mouse: drag windows by their title bar, click the red dot to close, click a dock icon to open an
-/// app, click the top-right pill to toggle light/dark. Keyboard: `1`–`4` open apps, `w` closes the
-/// focused window, `t` toggles the theme, `Esc` returns to the shell. Only redraws when something
-/// changes (dirty flag) — idle frames just `hlt`.
+/// Compose and present one real desktop frame for the bounded boot smoke suite.
+#[cfg(feature = "verify")]
+pub fn verify_frame() -> bool {
+    let Some(info) = crate::framebuffer::info() else { return false };
+    let Some(font) = Font::parse(qos_ui::font::DEFAULT_FONT) else { return false };
+    let mut fr = FontRenderer::new(font);
+    let mut surface = Surface::new(info.width, info.height);
+    let desk = Desktop::new(info.width as i32, info.height as i32);
+    desk.compose(&mut surface, &mut fr);
+    crate::framebuffer::blit_region(&surface.pixels, info.width, 0, 0, info.width, info.height);
+    // Exercise production composition/presentation, without an interactive loop or input claims.
+    info.width > 0 && info.height > 0 && surface.pixels.iter().any(|&p| p != 0)
+}
+
+/// Run the interactive modern desktop. Mouse/keyboard drive windows and dock apps;
+/// Esc returns to the shell. Idle frames yield with hlt.
 pub fn run_demo() {
     use crate::input::{InputEvent, MouseButton};
     let info = match crate::framebuffer::info() {

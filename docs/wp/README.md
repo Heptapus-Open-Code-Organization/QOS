@@ -9,6 +9,13 @@ criteria, and a status. WPs are how we execute the epics in [`../MASTERPLAN.md`]
 
 Use [`template.md`](template.md) for new WPs. Statuses: 🔴 not started · 🟡 in progress · ✅ done.
 
+The dated [implementation baseline](../STATUS_AND_BACKLOG.md) and
+[#39](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/39) distinguish delivered WP
+scope from unfinished integration, local tests from QEMU records, and unverified physical
+support. Follow-ups: syscall/ABI #40, isolated applications #41, shared quantum correctness #42,
+USB lifecycle #43, display backends #44, text/input/accessibility #45 and boot/update trust #46.
+Canonical open issues #19-#28 supersede their already-closed duplicates #29-#38.
+
 ## Register
 
 | WP | Title | Epic | ADR | Issue | Status |
@@ -26,6 +33,7 @@ Use [`template.md`](template.md) for new WPs. Statuses: 🔴 not started · 🟡
 | [WP-11](WP-11-installer-oobe.md) | Installer & first-boot setup: language, user, disk, login | E-90 | — | [#10](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/10) | 🟡 in progress |
 | [WP-12](WP-12-cloud-qpu-api.md) | Cloud QPU connectivity: QHAL backends + provider API | E-80/81 | ADR-0011+ | [#12](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/12) | 🔴 blocked on WP-10 |
 | [WP-13](WP-13-quantum-safe-security.md) | Quantum-safe security: PQC, kernel crypto, secure channels | E-54 | (new ADR) | [#19](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/19) | 🔴 not started |
+| [WP-14](WP-14-verification-gates.md) | Truthful UEFI verification and CI gates | E-90 | — | [#25](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/25) | 🟡 first slice implemented locally |
 
 All remaining epics are tracked as detailed [GitHub issues](https://github.com/Heptapus-Open-Code-Organization/QOS/issues)
 with milestones M1–M4: PCIe ECAM + MSI (#8) · block layer + NVMe/virtio-blk (#9) · VMM
@@ -48,8 +56,8 @@ OS" doesn't accrete silent debt. Each should become (or fold into) a WP.
 - **G-03** Interrupt handlers (keyboard/mouse/timer) are not yet driver-model citizens; they are
   still hand-wired in `interrupts.rs`. Once the driver model owns IRQs (post-USB), migrate them.
   *(open)*
-- **G-04** No `lsdev`/`lspci`-style shell command yet surfaces the device model to the user; it
-  only logs at boot. Small, user-visible; fold into a UI/shell WP. *(open)*
+- **G-04** Device inventory is visible in the Devices app; consistent shell/device-model
+  diagnostics and resource/IRQ ownership remain follow-ups under #8/#16. *(partial)*
 - **G-05** Single BSP only; the APIC timer is per-CPU but we start no APs. Blocks true multi-core
   (E-11 SMP). *(open)*
 - **G-06** BIOS boot image is disabled; UEFI-only. Fine for modern targets but note it. *(open)*
@@ -68,8 +76,8 @@ OS" doesn't accrete silent debt. Each should become (or fold into) a WP.
   carry their 1-based line; IDE problems row + red gutter + F8 jump. *(closed 2026-07-02)*
 - **G-13** ~~Editors were append/backspace-only~~ → **resolved** by WP-07 slices 1+3 (9125d8f):
   shared `ed_*` cursor-editing core in both the IDE and the Text Editor. *(closed 2026-07-02)*
-- **G-14** Three disjoint filesystems + `disk:` special-casing in apps; no mount tree. → WP-09.
-  *(open)*
+- **G-14** WP-09 slices 1-2 delivered the VFS mount tree and GUI path migration. Compositor
+  Terminal path parity, persistent directories and mount UX remain under #6. *(partial)*
 - **G-15** The NIC driver targets E1000 (8086:100e) but q35 exposes e1000e (8086:10d3) — no
   network at all today. → WP-10 slice 1. *(open)*
 - **G-16** No clean shutdown/reboot path surfaced in the UI (ACPI poweroff exists only as legacy
@@ -77,8 +85,9 @@ OS" doesn't accrete silent debt. Each should become (or fold into) a WP.
 - **G-17** Editor niceties deferred from WP-07 v1: text selections + clipboard, gate-name
   autocompletion, QASM import into the visual Lab (code → circuit), per-glyph click-to-position
   metrics. *(open)*
-- **G-18** PCIe ECAM + MSI/MSI-X are not implemented yet. This blocks the clean modern-device path
-  for NVMe, virtio, newer NICs and MSI-capable USB/storage devices. *(open; issue #8)*
+- **G-18** Standard PCI capability helpers and xHCI-specific MSI-X exist. ECAM/MCFG, shared
+  vector/resource management, BAR sizing and generic driver integration remain under #8.
+  *(partial; issue #8)*
 - **G-19** No uniform block layer/request queue/cache yet; AHCI/QOSFS exists, but filesystems and
   modern storage drivers need a shared block-device contract before NVMe/virtio-blk can mature.
   *(open; issue #9)*
@@ -96,5 +105,6 @@ OS" doesn't accrete silent debt. Each should become (or fold into) a WP.
 - **G-24** No kernel entropy source or CSPRNG API: RDSEED/RDRAND are unused and quantum shot
   sampling runs on an ad-hoc PRNG. One entropy-fed CSPRNG should serve both → WP-13 slice 2.
   *(open; issue #19)*
-- **G-25** No CI-run QEMU integration harness: boot smoke tests, serial assertions, and
-  screenshot checks exist only as ad-hoc local scripts. → E-90 testing issue. *(open; issue #25)*
+- **G-25** WP-14 adds a strict UEFI boot/frame/W^X/real-Bell smoke runner and portable CI
+  coverage, verified locally. PR/Linux CI execution, persistence, process and input/load
+  integration checks remain open. *(partial; #25)*

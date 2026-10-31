@@ -4,9 +4,8 @@
 //! QPU (via the ADR-0011 proxy), or a future local QPU. Polling-based and `no_std`-friendly.
 //! See ADR-0004. Topology/calibration types here also serve ADR-0006 and ADR-0007.
 //!
-//! NOTE: the first cut submits a [`ProcSpec`] (carrying the IR bytes). Once the typed
-//! `Circuit` IR is moved into `qos-core` (ADR-0005), `submit`/`validate` will take a
-//! `&Circuit` instead. The trait shape (lifecycle + polling) is stable.
+//! Submission uses the typed [`Circuit`] IR. [`QuantumBackend::prepare`] performs the
+//! first connectivity-routing stage before capability validation (ADR-0008).
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -44,6 +43,24 @@ pub struct Topology {
 }
 
 impl Topology {
+    /// Check the undirected coupling graph before routing or backend submission.
+    pub fn validate(&self) -> Result<(), BackendError> {
+        if self.connections.len() != self.n_qubits {
+            return Err(BackendError::Config("topology adjacency length mismatch".into()));
+        }
+        for (q, neighbors) in self.connections.iter().enumerate() {
+            for (i, &next) in neighbors.iter().enumerate() {
+                if next >= self.n_qubits || next == q || neighbors[..i].contains(&next) {
+                    return Err(BackendError::Config("invalid or duplicate topology edge".into()));
+                }
+                if !self.connections[next].contains(&q) {
+                    return Err(BackendError::Config("directed topology is not supported yet".into()));
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn all_to_all(n: usize) -> Self {
         let connections = (0..n)
             .map(|i| (0..n).filter(|&j| j != i).collect())
@@ -92,19 +109,21 @@ impl Topology {
     }
 
     pub fn is_connected(&self, a: usize, b: usize) -> bool {
-        a < self.n_qubits && b < self.n_qubits && self.connections[a].contains(&b)
+        a < self.n_qubits && b < self.n_qubits
+            && self.connections.get(a).map_or(false, |adj| adj.contains(&b))
     }
 
     /// True if every distinct pair of qubits is directly connected (no routing ever needed).
     pub fn is_all_to_all(&self) -> bool {
-        (0..self.n_qubits).all(|i| self.connections[i].len() == self.n_qubits.saturating_sub(1))
+        self.validate().is_ok()
+            && self.connections.iter().all(|adj| adj.len() == self.n_qubits.saturating_sub(1))
     }
 
     /// Shortest connectivity path from `a` to `b` (inclusive) via breadth-first search, or
     /// `None` if they are in disconnected components. `[a]` when `a == b`. Used by the router
     /// (ADR-0008) to decide how many SWAPs bring two logical qubits adjacent.
     pub fn shortest_path(&self, a: usize, b: usize) -> Option<Vec<usize>> {
-        if a >= self.n_qubits || b >= self.n_qubits {
+        if a >= self.n_qubits || b >= self.n_qubits || self.validate().is_err() {
             return None;
         }
         if a == b {
@@ -231,13 +250,33 @@ pub trait QuantumBackend: Send + Sync {
             ));
         }
         if let Some(topo) = &caps.topology {
+            topo.validate()?;
             if circuit.n_qubits > topo.n_qubits {
                 return Err(BackendError::UnsupportedCircuit(
                     "circuit exceeds backend topology size".to_string(),
                 ));
             }
         }
-        Ok(())
+        crate::transpile::validate_capabilities(circuit, caps)
+    }
+
+    /// Prepare an identity-layout circuit for this backend. Routing SWAPs must be native;
+    /// unsupported native gates are rejected until decomposition passes are implemented.
+    fn prepare(&self, circuit: &Circuit) -> Result<crate::RoutingResult, BackendError> {
+        if circuit.n_qubits > self.capabilities().max_qubits {
+            return Err(BackendError::UnsupportedCircuit(
+                "circuit needs more qubits than the backend supports".into(),
+            ));
+        }
+        let prepared = if let Some(topo) = &self.capabilities().topology {
+            crate::route_circuit(circuit, topo)?
+        } else {
+            let mut circuit = circuit.clone();
+            circuit.reset_pc();
+            crate::RoutingResult { circuit, inserted_swaps: 0 }
+        };
+        self.validate(&prepared.circuit)?;
+        Ok(prepared)
     }
 
     /// Submit a circuit for `shots` repetitions. Per ADR-0004/0005 the QHAL operates on the
@@ -299,12 +338,12 @@ impl QuantumBackend for LocalSimulatorBackend {
     }
 
     fn submit(&mut self, circuit: &Circuit, shots: u64) -> Result<BackendJobId, BackendError> {
-        self.validate(circuit)?;
+        let prepared = self.prepare(circuit)?;
         let id = self.next_id;
         self.next_id += 1;
 
         let shots = shots.max(1);
-        let sim = circuit.run_shots(shots);
+        let sim = prepared.circuit.run_shots(shots);
 
         self.results.insert(
             id,

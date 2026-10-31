@@ -12,13 +12,19 @@ cargo image
 cargo os-build            # = build -p os --target x86_64-unknown-none -Zbuild-std=core,alloc
 
 # Host unit tests for the portable crates
-cargo test -p qos-gfx -p qos-driver -p qos-acpi -p qos-core --features qos-core/std
+cargo test -p qos-abi -p qos-gfx -p qos-ui -p qos-driver -p qos-acpi -p qos-core -p qos-verify --features qos-core/std
 ```
 
 Toolchain is pinned (nightly-2024-12-01) in `rust-toolchain.toml`. `.cargo/config.toml` sets
 `relocation-model=static` + `-z norelro` (required for UEFI — see ADR-0014) and `bindeps`.
 
 ## Run / test in QEMU + OVMF (UEFI)
+
+The canonical automated gate is **`cargo os-verify`**, shared with Linux CI. It builds the
+separate verification image and requires explicit UEFI/frame/W^X/real-Bell completion and exit
+33; timeout/faults fail. Logs live in `target/qos-verify/run-*`. See
+[WP-14](wp/WP-14-verification-gates.md) for firmware overrides and coverage limits. The manual
+commands below are exploratory workflows, not substitutes for that gate.
 
 QEMU is at `C:\Program Files\qemu`; OVMF firmware ships with it:
 `share/edk2-x86_64-code.fd` (code) and `share/edk2-i386-vars.fd` (vars template — arch-neutral
@@ -53,9 +59,9 @@ To capture the desktop, drive the guest via the QEMU monitor and `screendump`:
     -serial file:serial.log -monitor stdio -vnc 127.0.0.1:3
 ```
 
-- **Do NOT attach `usb-kbd` for the screenshot test.** QEMU routes `sendkey` to the USB keyboard
-  when present, and USB HID input isn't finished yet (WP-04), so `gdesk` never gets typed. Use the
-  PS/2 keyboard (omit `-device usb-kbd`) so `sendkey` drives PS/2 and the desktop launches.
+- QEMU routes `sendkey` to USB when `usb-kbd` is present. Boot-protocol USB input is implemented
+  (WP-04); explicitly record whether a manual input test uses USB or PS/2. The automated v1
+  smoke renders a frame without injecting input, so it does not establish input coverage.
 - Convert PPM→PNG with a small pure-Python (zlib) snippet (no PIL needed); `Read` the PNG.
 - Confirm the desktop rendered by grepping serial for `[GFXUI] entering interactive desktop`.
 

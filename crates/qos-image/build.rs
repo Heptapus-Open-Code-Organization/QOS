@@ -8,7 +8,13 @@ fn main() {
     let kernel = PathBuf::from(kernel);
 
     let out_dir = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-    let uefi = out_dir.join("qos-uefi.img");
+    // Verification must never replace the interactive image used by the launcher/releases.
+    let image_name = if std::env::var_os("CARGO_FEATURE_VERIFY").is_some() {
+        "qos-uefi-verify.img"
+    } else {
+        "qos-uefi.img"
+    };
+    let uefi = out_dir.join(image_name);
 
     bootloader::UefiBoot::new(&kernel)
         .create_disk_image(&uefi)
@@ -19,7 +25,7 @@ fn main() {
     let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let dist = manifest.join("../../dist");
     let _ = std::fs::create_dir_all(&dist);
-    std::fs::copy(&uefi, dist.join("qos-uefi.img")).expect("failed to copy UEFI image to dist/");
+    std::fs::copy(&uefi, dist.join(image_name)).expect("failed to copy UEFI image to dist/");
 
     // Expose the image path to the binary via env!().
     println!("cargo:rustc-env=QOS_UEFI_IMAGE={}", uefi.display());

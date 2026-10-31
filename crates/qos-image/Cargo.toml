@@ -2,7 +2,10 @@
 name = "qos-image"
 version = "0.1.0"
 edition = "2021"
-description = "Builds bootable BIOS + UEFI disk images for the QOS kernel (bootloader 0.11)."
+description = "Builds bootable UEFI disk images for the QOS kernel (bootloader 0.11)."
+
+[features]
+verify = ["os/verify"]
 
 [dependencies]
 

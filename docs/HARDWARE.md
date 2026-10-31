@@ -1,85 +1,88 @@
-# Running QOS on real hardware and VMs
+# QOS hardware and VM support
 
-This document describes how to run QOS outside the development QEMU setup, and what hardware is
-currently supported. It is kept honest: items are marked **verified**, **should work**, or
-**not yet supported**.
+Status reconciled **2026-10-31**. Execution inventory:
+[STATUS_AND_BACKLOG.md](STATUS_AND_BACKLOG.md). Canonical hardware tracker:
+[#14](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/14).
 
-## Boot model
+## Boot and build
 
-QOS currently boots via **legacy BIOS** (it uses `bootloader` 0.9.29, which produces a raw,
-MBR-bootable disk image — `bootimage-os.bin`). It is **not yet UEFI-native**: on modern
-UEFI-only machines you must enable **CSM / Legacy Boot**, or wait for the UEFI build (tracked as
-Phase 3.2, a `bootloader` 0.11+ migration — see [PLAN.md](PLAN.md)).
-
-The build produces a single bootable image. The helper `dist/` images below are the same image
-in different container formats:
-
-| File | Format | Use |
-|---|---|---|
-| `dist/qos.img` | raw | `dd` to a USB stick; QEMU `-drive format=raw` |
-| `dist/qos.vdi` | VirtualBox | attach as a VirtualBox disk |
-| `dist/qos.vmdk` | VMware | attach as a VMware disk |
-
-Regenerate them from a fresh build with:
-
-```sh
-cargo os-bootimage
-qemu-img convert -f raw -O vdi  target/x86_64-unknown-none/debug/bootimage-os.bin dist/qos.vdi
-qemu-img convert -f raw -O vmdk target/x86_64-unknown-none/debug/bootimage-os.bin dist/qos.vmdk
-cp                              target/x86_64-unknown-none/debug/bootimage-os.bin dist/qos.img
-```
-
-## How to run
-
-### QEMU — verified
+The current image builder uses **bootloader 0.11** and produces a **UEFI x86-64** image at
+`dist/qos-uefi.img`. The active builder creates the UEFI image only; legacy BIOS/container
+instructions from the older bootloader 0.9 path are not current release instructions.
 
 ```powershell
-./run-qos.ps1 -Build
+cargo image
+./run-qos-uefi.ps1 -Build -Serial
 ```
 
-Verified machine types: the default `pc` (i440fx) and `q35`. Boot reaches the shell and the
-graphical desktop (`gdesk`) on both, with or without a network device.
+Prerequisites: the toolchain pinned in `rust-toolchain.toml`, QEMU, and compatible OVMF/edk2
+firmware. The Windows launcher discovers QEMU/firmware, uses a private writable firmware
+variable store, and handles non-ASCII workspace paths through an ASCII-only run directory.
+Inspect the launcher for the exact device profile before reproducing a result.
 
-### VirtualBox — should work (legacy BIOS)
+The modern desktop uses a firmware framebuffer and software compositor with TrueType fonts
+at native resolution. This does not establish a vendor GPU driver, hardware acceleration,
+runtime mode setting, or multi-monitor support.
 
-1. New VM → Type: *Other*, Version: *Other/Unknown (64-bit)*.
-2. **System → Motherboard → disable EFI** (use legacy BIOS).
-3. Attach `dist/qos.vdi` as the (IDE/SATA) hard disk.
-4. Start. (PS/2 mouse: click into the VM to capture; host key releases it.)
+## Evidence levels and targets
 
-### VMware — should work (legacy BIOS)
+"QEMU-recorded" means prior WP/ADR records contain successful runs. The October audit rebuilt
+the kernel and ran host tests, but did not independently rerun these boots.
 
-Create a VM with **BIOS** firmware (not UEFI) and attach `dist/qos.vmdk` as the disk.
+| Target | Evidence | Boundary |
+|---|---|---|
+| QEMU + OVMF, q35 | UEFI/framebuffer, APIC, xHCI HID and AHCI data persistence recorded in WP-01/03/04/05/09 | Selected emulated devices/configurations; networking remains an open work package |
+| QEMU + OVMF, pc | UEFI desktop boot reported in README | No claim that every q35 device/interrupt path is covered |
+| VirtualBox, VMware, Hyper-V | Unverified for the current image/profile | Use UEFI configuration when testing; collect results under #14 |
+| Physical x86-64 UEFI machines | No completed validation matrix identified | Select a machine, firmware version and device inventory before claiming support |
+| Legacy BIOS-only machines | No current BIOS image from qos-image | Retired BIOS launch instructions are not proof of current support |
+| Other CPU architectures | Outside current initial support profile | No ARM64 or other architecture support claim |
 
-### Real PC via USB — should work where Legacy/CSM is available
+## Device support boundaries
 
-Write the raw image to a USB stick, then boot the target machine with **Legacy/CSM** enabled:
+| Subsystem | Current implementation / records | Remaining work |
+|---|---|---|
+| CPU | Single bootstrap processor, preemptive kernel/Ring-3 scheduling infrastructure | SMP/AP bring-up and per-CPU ownership/scheduling: #7/#20 |
+| ACPI/interrupts | Bootloader RSDP/MADT discovery, local APIC and IO-APIC, QEMU-recorded timer/input | Legacy power-control code integration, wider firmware validation: #13/#14 |
+| PCI | Config I/O enumeration, standard capability helpers, xHCI-specific MSI-X | ECAM/MCFG, BAR lengths, general vector/resource management: #8 |
+| PS/2 | Legacy keyboard/mouse fallback | Validate fallback per target; not a promise of laptop internal input support |
+| USB input | xHCI boot-protocol keyboard/mouse, multiple devices, MSI-X plus poll fallback recorded | Hubs, runtime hotplug/removal, general HID and laptop bus inventory: #43 |
+| Storage | AHCI/SATA data disk, QOSFS persistence recorded across two boots | Common block layer, NVMe/virtio-blk, multi-device and partition handling: #9 |
+| USB storage | No completed mass-storage path | BOT/SCSI and block/VFS integration: #22 |
+| Graphics | Firmware framebuffer, native-resolution software desktop | Display backend/mode setting/multi-output: #44 |
+| Network | E1000/TCP/IP code; E1000/e1000e mismatch documented in WP-10 | Pin an actual NIC/device ID and verify link, DHCP/DNS/TCP/TLS: #5 |
+| Audio | No completed playback stack | Selected controller, PCM/mixer and settings: #28 |
+| Power/laptop | Legacy ACPI shutdown/reboot code exists | Verified shutdown first; suspend/resume, battery/thermal policy later: #13 |
+| Wi-Fi/Bluetooth/camera | No completed implementation identified in reviewed paths | Deferred target decisions; do not infer support from PCI/USB enumeration |
 
-- Linux/macOS: `sudo dd if=dist/qos.img of=/dev/sdX bs=4M conv=fsync` (replace `/dev/sdX` with
-  your USB device — **this erases it**).
-- Windows: use a raw-image writer such as Rufus in *DD image* mode, or `Win32 Disk Imager`.
+A USB keyboard result does not prove I2C-HID touchpad support. Two-boot file survival does not
+prove power-loss/crash consistency (#27). Missing-device fallbacks need tests alongside success
+paths; support is a per-configuration claim.
 
-> ⚠️ Real-hardware boot has not been independently verified by the maintainers across many
-> machines. It depends on the firmware supporting legacy boot. Reports (success or failure, with
-> the machine model) via an issue are very welcome.
+## Safe VM and physical validation workflow
 
-## Hardware probing & graceful fallback
+1. Build the current UEFI image and record the commit plus any local modifications.
+2. Record QEMU/hypervisor version, firmware, CPU/memory, disk/input/display/NIC device models
+   and exact launch arguments.
+3. Capture serial boot markers, faults and W^X results; exercise input, desktop, storage and
+   networking separately. Record "unverified" rather than extrapolating from a device name.
+4. Use a disposable data image to test write/reboot/removal behavior. Preserve the current
+   launcher boot-volume protections; QOSFS has no crash-consistency guarantee yet.
+5. For physical USB boot, use a dedicated disposable medium and identify the destination
+   explicitly before writing `dist/qos-uefi.img`; imaging overwrites the chosen medium.
+   Secure Boot enrollment/verified boot is unfinished (#46), so firmware policy must be
+   recorded rather than claiming an established trust chain.
+6. Booting the image from removable media is distinct from installing QOS to a target disk.
+   GPT/ESP installation and boot without installation media remain #10.
 
-QOS probes for devices at boot and continues if they are absent — a missing device must not hang
-or panic the kernel:
+## Result record required by #14
 
-| Device | Behavior |
-|---|---|
-| PS/2 keyboard | Driven via IRQ1; assumed present. |
-| PS/2 mouse | Probed (Intellimouse); the desktop works without it (keyboard shortcuts). |
-| PIT timer (IRQ0) | Used for preemptive scheduling and the clock. |
-| PCI bus | Enumerated; devices logged. |
-| Intel E1000 NIC | Optional — if not found, networking is skipped (verified: boots `-net none`). |
-| RTC | Read for the wall clock. |
+For every VM or physical run, store the date, commit/worktree status, model/firmware, device
+IDs, launch or boot settings, pass/fail/unverified for boot/display/input/storage/network/power,
+serial/screenshots, reproduction steps and remaining limitations. Physical machine names are
+added to the support matrix only after this evidence exists.
 
-## Known limitations
-
-- **UEFI** is not supported yet (legacy BIOS only) — Phase 3.2.
-- **Graphics** use VGA Mode 13h (320×200×256) for the desktop; higher-resolution VESA is Phase 3.2.
-- **APIC/HPET**: QOS currently assumes the legacy PIC/PIT; APIC/HPET support is planned (Phase 4.3).
-- SMP (multi-core) is not used; QOS runs on a single core.
+Relevant records: [WP-04 USB](wp/WP-04-usb-input.md),
+[WP-09 VFS](wp/WP-09-vfs-unification.md),
+[WP-10 networking](wp/WP-10-networking.md),
+[ADR-0014 boot](adr/0014-migrate-to-bootloader-0.11-uefi-framebuffer.md).

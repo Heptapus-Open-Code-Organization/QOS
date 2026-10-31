@@ -10,9 +10,12 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+
 jobs:
   test-core:
-    name: Test portable core (qos-core)
+    name: Test portable crates and verification runner
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +30,8 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-core-${{ hashFiles('**/Cargo.lock') }}
-      - run: cargo test -p qos-core --features std
+      - run: cargo test -p qos-abi -p qos-gfx -p qos-ui -p qos-driver -p qos-acpi -p qos-core -p qos-verify --features qos-core/std
+      - run: cargo check -p qos-core --no-default-features --target x86_64-unknown-none
 
   build-kernel:
     name: Build kernel ELF
@@ -46,7 +50,7 @@ jobs:
       - run: cargo os-build
 
   build-image:
-    name: Build bootable BIOS + UEFI images
+    name: Build interactive UEFI image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +64,7 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-image-${{ hashFiles('**/Cargo.lock') }}
       # qos-image (artifact dep + bootloader 0.11) compiles the kernel for x86_64-unknown-none
-      # and creates BIOS + UEFI disk images, copying them into dist/.
+      # and creates the interactive UEFI disk image, copying it into dist/.
       - name: Build disk images
         run: cargo build -p qos-image --release
       - name: Upload disk image
@@ -71,28 +75,29 @@ jobs:
           if-no-files-found: error
 
   smoke-uefi:
-    name: Headless UEFI boot smoke test (best-effort)
+    name: Required UEFI boot and real quantum smoke
     runs-on: ubuntu-latest
-    continue-on-error: true
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Show toolchain
         run: rustup show
       - name: Install QEMU + OVMF
         run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 ovmf
-      - name: Build UEFI image (verify feature exits via isa-debug-exit)
-        run: |
-          cd crates/qos-os-kernel
-          # Build the verify-flavored kernel, then create a UEFI image from it.
-          cargo build -p qos-image --release
-      - name: Boot the UEFI image under QEMU + OVMF
-        run: |
-          OVMF=$(ls /usr/share/OVMF/OVMF_CODE*.fd 2>/dev/null | head -1 || echo /usr/share/ovmf/OVMF.fd)
-          echo "Using OVMF: $OVMF"
-          timeout 120 qemu-system-x86_64 \
-            -drive if=pflash,format=raw,readonly=on,file="$OVMF" \
-            -drive format=raw,file=dist/qos-uefi.img \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-            -display none -serial stdio --no-reboot -m 256M; \
-          code=$?; echo "QEMU exit code: $code"; \
-          test "$code" = "33" || test "$code" = "0" || test "$code" = "124"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-verify-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build verification image and require guest completion
+        run: cargo os-verify
+      - name: Upload verification diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qos-uefi-verification
+          path: target/qos-verify/
+          if-no-files-found: warn
+          retention-days: 7

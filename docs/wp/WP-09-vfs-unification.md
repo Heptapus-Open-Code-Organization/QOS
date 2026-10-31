@@ -54,5 +54,6 @@ Per slice: the same file operations work through one API in QEMU; existing persi
 
 ## Notes & gaps
 
-- The existing `vfs.rs` is a stub to grow into slice 1 rather than a new module.
+- `vfs.rs` now implements the facade/mount adapters from slices 1-2; remaining parity,
+  directories and mount UX stay in #6. Crash consistency/free-space recovery is #27.
 - Keep fallback-first: a missing disk must leave the RAM tree fully functional.

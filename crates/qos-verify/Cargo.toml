@@ -1,0 +1,8 @@
+[package]
+name = "qos-verify"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license.workspace = true
+repository.workspace = true
+description = "Dependency-free host runner for QOS UEFI verification"

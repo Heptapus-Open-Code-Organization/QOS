@@ -1,12 +1,17 @@
 # WP-08: Kernel foundations — preemption, user-mode processes, memory protection
 
-- Status: 🟡 in progress (slice 1 done)
+- Status: 🟡 in progress (slices 1-2 delivered; desktop app isolation remains incomplete)
 - Epic: E-11 (SMP later), E-30 (processes), E-31 (syscalls)
 - ADRs: ADR-0020 (CPU hardening baseline); new ADRs per slice below
 - Commits: 43d10e0 (slice 1: preemptive scheduler armed under the desktop + background quantum
   jobs), 5dbe995 (slice 2: W^X enforced + page-table audit)
 
 ## Goal
+
+**2026-10-31 clarification:** the paragraph below describes the starting point. Desktop
+preemption and W^X subsequently landed; ordinary desktop apps still share kernel memory.
+Current follow-ups are #7 (owned resources/SMP), #40 (syscall boundary) and #41 (isolated apps),
+with evidence tracked in [the execution baseline](../STATUS_AND_BACKLOG.md).
 
 Close the biggest "real OS" gaps in the kernel core. Today the desktop runs as a single
 cooperative kernel loop: no preemption while an app computes, no isolation between "apps" (all

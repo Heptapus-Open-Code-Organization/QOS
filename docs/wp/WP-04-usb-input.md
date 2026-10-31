@@ -17,6 +17,10 @@ modern laptops, which have no PS/2. Built on the driver model (WP-02) and the AP
 - Out (defer): USB hubs beyond the root, mass storage (separate WP), full (non-boot) HID report
   descriptors, USB 1.x companion controllers (UHCI/EHCI) — xHCI presents all speeds.
 
+**2026-10-31 follow-up:** runtime attach/detach, hubs and general HID are tracked in
+[#43](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/43); mass storage remains
+#22. WP completion covers the boot HID scope, not arbitrary USB/laptop input support.
+
 ## Steps
 
 - [x] **Step 1 — Detect the xHCI controller.** Match PCI class 0x0C/0x03 via the driver model;

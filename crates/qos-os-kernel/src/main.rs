@@ -65,6 +65,8 @@ mod dialog;     // Dialog boxes
 mod explorer;   // File explorer
 mod desktop;    // Windows-style desktop environment
 mod desktop_apps; // Desktop applications
+#[cfg(feature = "verify")]
+mod verify;
 
 use bootloader_api::{entry_point, BootInfo, BootloaderConfig};
 use bootloader_api::config::Mapping;
@@ -206,8 +208,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     #[cfg(feature = "verify")]
     {
-        crate::serial_println!("VERIFY: exiting QEMU");
-        qemu::exit(0x10);
+        verify::run();
     }
 
     runtime::run_kernel_loop();
@@ -217,6 +218,9 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 fn panic(info: &core::panic::PanicInfo) -> ! {
     serial::println!("PANIC: {}", info);
     vga::println!("PANIC: {}", info);
+
+    #[cfg(feature = "verify")]
+    qemu::exit(0x11);
 
     loop {
         arch::hlt();

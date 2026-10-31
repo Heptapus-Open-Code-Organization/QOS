@@ -55,3 +55,33 @@ the same code so it is continuously exercised.
 
 - Pass quality metrics (added gate count, estimated fidelity from calibration) are reported in
   job metadata for observability.
+
+## Implementation increment (2026-10-31)
+
+The portable `qos-core::route_circuit` now implements the first routing stage for CX, CZ and
+SWAP over validated, undirected connectivity graphs. It uses shortest paths within the active
+qubit register, inserts SWAPs to bring the first operand adjacent to the second, then reverses
+those routing SWAPs. Restoring the identity layout preserves subsequent gates, classical
+measurement destinations, and output wire order without a result-remapping contract. The
+returned `RoutingResult` exposes `inserted_swaps`; the input is unchanged and the output starts
+at instruction zero.
+
+`QuantumBackend::prepare` routes and then validates the prepared circuit against backend
+capabilities. The portable local simulator's submission path calls it, exercising the
+all-to-all identity case. Validation rejects invalid register indices, repeated gate operands,
+non-finite angles, unsupported native gates, unsupported operations after measurement, and
+invalid topology graphs before execution. Direct `validate` checks an already prepared circuit
+and rejects nonlocal gates. Backend implementations must call `prepare` from their submission
+path if they accept logical circuits.
+
+This is a conservative first pass: it adds more SWAPs than a persistent layout would, does not
+use spare physical wires, and requires native SWAP support whenever routing inserts SWAPs.
+Directed couplings and native-gate decomposition are not implemented; CCX requires pairwise
+connectivity. Calibration-aware layout, optimization stages, and kernel IDE/Lab integration
+remain follow-ups. The kernel still has its separate simulator/toolchain; this increment does
+not claim a remote provider or a change to the desktop execution path.
+
+Verification: `cargo test -p qos-core --features std` covers statevector equivalence on every
+four-qubit basis input for CX/CZ/SWAP over linear and grid graphs (including complex phases
+and subsequent gates), all-to-all identity, measurement-destination preservation in the IR,
+capability failures, malformed/disconnected graphs, and invalid-input rejection at submission.

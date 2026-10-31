@@ -11,8 +11,9 @@ fn main() {
     if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") {
         let dist = Path::new(&manifest).join("../../dist");
         let _ = std::fs::create_dir_all(&dist);
-        if std::fs::copy(UEFI_IMAGE, dist.join("qos-uefi.img")).is_ok() {
-            println!("Copied to {}/qos-uefi.img", dist.display());
+        let image_name = Path::new(UEFI_IMAGE).file_name().expect("image filename");
+        if std::fs::copy(UEFI_IMAGE, dist.join(image_name)).is_ok() {
+            println!("Copied to {}", dist.join(image_name).display());
         }
     }
 }

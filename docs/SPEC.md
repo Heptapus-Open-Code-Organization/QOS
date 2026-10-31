@@ -1,6 +1,10 @@
 
 # QOS Spec (Roadmap)
 
+This is the original architectural roadmap, retained for context. Its "today" and non-goal
+statements are historical. Use [STATUS_AND_BACKLOG.md](STATUS_AND_BACKLOG.md), MASTERPLAN and
+the WPs for the current UEFI desktop/control-plane baseline and remaining integration work.
+
 Goal: A "Quantum Operating System" that feels like Windows/Linux, but treats quantum circuits as first-class workloads (like processes/jobs), with scheduling, resource management, UI, and device backends (simulator now, real QPU later).
 
 Important reality check:

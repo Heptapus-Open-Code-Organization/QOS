@@ -4,6 +4,11 @@ Status: living document, created 2026-07-01. This is the authoritative long-rang
 superseded the earlier `ROADMAP.md`/`VISION.md`, since removed). Short-range execution detail
 lives in `docs/PLAN.md`; every structural decision is (or becomes) an ADR in `docs/adr/`.
 
+**Execution baseline (2026-10-31):** use [STATUS_AND_BACKLOG.md](STATUS_AND_BACKLOG.md) and
+[#39](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/39) for the reconciled
+hardware/software inventory, evidence levels, canonical issues and dependency gates. Historical
+milestone bands below are not the same identifiers as the four GitHub milestones.
+
 ## 1. Vision
 
 QOS is a **real, modern, general-purpose operating system** for **UEFI x86-64** — booting and
@@ -15,7 +20,8 @@ differentiator (ADR-0002). "Real and modern" concretely means:
   `init()` calls per device.
 - Modern hardware: **APIC/SMP** (multi-core), **USB** (HID + storage), **NVMe/virtio** storage,
   modern **NIC**s, high-resolution **framebuffer** graphics (done, ADR-0014).
-- A modern **user space**: isolated processes (done), a stable syscall ABI (done), a C library
+- A modern **user space**: Ring-3/isolation demos exist; production app isolation and a unified
+  audited ABI remain incomplete (#40/#41), alongside a C library
   and POSIX-ish surface, users/permissions, and a real UI (compositor, scalable fonts, widgets).
 - Quantum computing as a **built-in subsystem**: simulator (done), transpilation, error
   mitigation, calibration, multi-backend + cloud QPU, hybrid execution, and dev tools.
@@ -165,12 +171,15 @@ Three tracks can advance in parallel: **hardware** (needs the driver model + API
 
 ## 7. Immediate next steps
 
-1. Write the **driver-model ADR** (E-01) — the architectural centerpiece.
-2. Implement **E-01** (device/driver registry + IRQ/resource abstraction) and retrofit one
-   existing driver (e.g. PS/2 or E1000) as the proof.
-3. Implement **E-10 ACPI/APIC** on top of it (dependency root for USB/SMP).
-4. In parallel, continue **E-80 transpilation** (host-testable, already started) and/or begin the
-   **E-70 compositor** for visible UI progress.
+1. Reconcile status/evidence and support profiles through #39/#14; do not restart delivered
+   driver-model, APIC or compositor milestones.
+2. Make CI/QEMU gates enforce actual success (#25); harden the syscall transfer boundary (#40).
+3. Establish process-owned resources, minimal SDK and isolated applications (#7/#15/#41),
+   with the necessary memory/time foundations (#20/#21).
+4. Advance VFS/block/durability/network work (#6/#9/#27/#5) and quantum correctness/shared
+   execution (#42) according to their independent prerequisites.
+5. Use [STATUS_AND_BACKLOG.md](STATUS_AND_BACKLOG.md) stages S0-S4 for subsequent hardware,
+   desktop, installation, security and cloud-QPU acceptance gates.
 
 ## 8. Risks
 

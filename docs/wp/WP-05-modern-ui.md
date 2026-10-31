@@ -7,6 +7,10 @@
 
 ## Goal
 
+**2026-10-31 follow-ups:** #11 owns remaining window/notification/image-viewer work; #45 owns
+shared text input/clipboard/accessibility, #44 display backends and #41 isolated applications.
+Completed compositor/app demos do not close those broader integration scopes.
+
 Replace the retro 320×200 scaled desktop with a **modern**, native-resolution, true-color UI:
 a compositor, antialiased TrueType text, a macOS/GNOME-hybrid shell (top bar + dock) with **light
 and dark themes**, a branded **animated Heptapus boot splash**, and a suite of built-in apps.

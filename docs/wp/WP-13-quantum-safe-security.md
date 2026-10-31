@@ -5,6 +5,9 @@
 - ADRs: new ADR for the crypto policy (algorithm suite, hybrid rule, entropy model)
 - Commits: (appended as delivered)
 
+Tracking: #19 owns cryptographic primitives/entropy/secrets. #46 separately owns the UEFI boot
+trust chain and crash-recoverable system update/rollback lifecycle; #26 owns app packages.
+
 ## Goal
 
 QOS presents itself as a quantum operating system, so its own security must survive a quantum

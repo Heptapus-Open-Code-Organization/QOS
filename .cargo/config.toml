@@ -5,14 +5,14 @@ bindeps = true
 [alias]
 xtask = "run -p qos-os-xtask --"
 
-# Build bootable BIOS + UEFI images (bootloader 0.11) and copy them to dist/.
+# Build the interactive UEFI image (bootloader 0.11) and copy it to dist/.
 image = "run -p qos-image --release"
 
 # Convenience aliases for the bare-metal kernel package (`os`).
 os-build = "build -p os --target x86_64-unknown-none -Zbuild-std=core,alloc"
 os-run = "run -p os --target x86_64-unknown-none -Zbuild-std=core,alloc"
 os-bootimage = "bootimage -p os --target x86_64-unknown-none"
-os-verify = "run -p qos-os-xtask -- verify"
+os-verify = "run -p qos-verify --"
 
 # QEMU running is handled by the bootimage runner when you do:
 #   cargo run -p os --target x86_64-unknown-none

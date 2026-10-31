@@ -8,8 +8,8 @@ All repository content (code, comments, docs) is in **English**.
 1. Install the Rust toolchain. The pinned nightly is declared in `rust-toolchain.toml` and is
    selected automatically by `rustup` — it includes `rust-src`, `llvm-tools-preview`, and the
    `x86_64-unknown-none` target.
-2. Install the boot-image tool: `cargo install bootimage`.
-3. Install [QEMU](https://www.qemu.org/) (`qemu-system-x86_64`) to run the kernel.
+2. Install [QEMU](https://www.qemu.org/) (`qemu-system-x86_64`) and a matching OVMF/edk2
+   firmware code/vars pair. The current UEFI image builder needs no `cargo-bootimage` install.
 
 A Docker-based build is available (`Dockerfile` / `docker-compose.yml`) if you prefer a clean
 Linux toolchain.
@@ -17,14 +17,18 @@ Linux toolchain.
 ## Build, run, test
 
 ```sh
-cargo test -p qos-core --features std   # portable core unit tests (host)
+cargo test -p qos-abi -p qos-gfx -p qos-ui -p qos-driver -p qos-acpi -p qos-core -p qos-verify --features qos-core/std
 cargo os-build                          # build the bare-metal kernel
-cargo os-bootimage                      # build a bootable image
-cargo os-verify                         # headless boot + Ring-3 quantum demo smoke test
+cargo image                             # build the interactive UEFI image
+cargo os-verify                         # strict UEFI/frame/W^X/real-Bell smoke
 ```
 
-On Windows, `./run-qos.ps1 -Build` builds and launches QEMU. See the [README](README.md) for the
+On Windows, `./run-qos-uefi.ps1 -Build` builds and launches QEMU. See the [README](README.md) for the
 in-OS demo commands (`threadtest`, `proctest`, `faulttest`, `gdesk`, …).
+
+The same `cargo os-verify` command runs locally and in Linux CI. Configure matching firmware
+with `QEMU_UEFI_CODE`/`QEMU_UEFI_VARS` when discovery is insufficient; see
+[WP-14](docs/wp/WP-14-verification-gates.md) for artifact locations and coverage boundaries.
 
 ## Project layout
 
