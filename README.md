@@ -103,8 +103,8 @@ A Docker-based build is also available (see `Dockerfile` / `docker-compose.yml` 
 `cargo os-verify` requires QEMU and a matching OVMF/edk2 code/vars pair. It builds a separate
 verification image, rejects timeout/guest faults/missing completion markers, and saves logs
 under `target/qos-verify/`. See [WP-14](docs/wp/WP-14-verification-gates.md) for configuration,
-the initial checks and [WP-15](docs/wp/WP-15-user-memory-transfers.md) for the current v2
-user-copy/Ring-3 coverage. Full process/storage/input coverage remains incomplete.
+the initial checks and [WP-15](docs/wp/WP-15-user-memory-transfers.md) for the current v3
+user-copy/Ring-3/entry-policy coverage. Full process/storage/input coverage remains incomplete.
 
 ## Running on real hardware and VMs
 

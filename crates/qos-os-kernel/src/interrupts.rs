@@ -6,7 +6,7 @@ use x86_64::PrivilegeLevel;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 use x86_64::registers::control::Cr2;
 
-use crate::{arch, gdt, keyboard, serial, syscall, vga};
+use crate::{arch, gdt, keyboard, serial, vga};
 
 pub static TICKS: AtomicU64 = AtomicU64::new(0);
 static CTRL_DOWN: AtomicBool = AtomicBool::new(false);
@@ -62,16 +62,18 @@ lazy_static! {
     static ref IDT: InterruptDescriptorTable = {
         let mut idt = InterruptDescriptorTable::new();
 
-        idt.breakpoint.set_handler_fn(breakpoint_handler);
+        unsafe {
+            idt.breakpoint.set_handler_addr(x86_64::VirtAddr::new(crate::asm_stubs::asm_breakpoint_isr as usize as u64));
 
-        idt.invalid_opcode.set_handler_fn(invalid_opcode_handler);
-        idt.general_protection_fault
-            .set_handler_fn(general_protection_fault_handler);
-        idt.page_fault.set_handler_fn(page_fault_handler);
+            idt.invalid_opcode.set_handler_addr(x86_64::VirtAddr::new(crate::asm_stubs::asm_invalid_opcode_isr as usize as u64));
+            idt.general_protection_fault
+                .set_handler_addr(x86_64::VirtAddr::new(crate::asm_stubs::asm_gpf_isr as usize as u64));
+            idt.page_fault.set_handler_addr(x86_64::VirtAddr::new(crate::asm_stubs::asm_page_fault_isr as usize as u64));
+        }
 
         unsafe {
             idt.double_fault
-                .set_handler_fn(double_fault_handler)
+                .set_handler_addr(x86_64::VirtAddr::new(crate::asm_stubs::asm_double_fault_isr as usize as u64))
                 .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
         }
 
@@ -83,8 +85,10 @@ lazy_static! {
             idt[InterruptIndex::Timer.as_u8()]
                 .set_handler_addr(x86_64::VirtAddr::new(crate::asm_stubs::asm_timer_isr as usize as u64));
         }
-        idt[InterruptIndex::Keyboard.as_u8()].set_handler_fn(keyboard_interrupt_handler);
-        idt[InterruptIndex::Mouse.as_u8()].set_handler_fn(mouse_interrupt_handler);
+        unsafe {
+            idt[InterruptIndex::Keyboard.as_u8()].set_handler_addr(x86_64::VirtAddr::new(crate::asm_stubs::asm_keyboard_isr as usize as u64));
+            idt[InterruptIndex::Mouse.as_u8()].set_handler_addr(x86_64::VirtAddr::new(crate::asm_stubs::asm_mouse_isr as usize as u64));
+        }
 
         // Local-APIC timer (E-10): same preemptive ISR as the PIT timer, on its own vector. The
         // scheduler tick moves here once `apic::start_apic_timer_100hz` runs; `timer_dispatch`
@@ -96,15 +100,17 @@ lazy_static! {
 
         // Local-APIC spurious vector (E-10): fired by the APIC on rare conditions; needs a
         // present IDT entry so it doesn't #GP, and requires NO end-of-interrupt.
-        idt[SPURIOUS_VECTOR].set_handler_fn(spurious_interrupt_handler);
+        unsafe { idt[SPURIOUS_VECTOR].set_handler_addr(x86_64::VirtAddr::new(crate::asm_stubs::asm_spurious_isr as usize as u64)); }
 
         // xHCI USB controller MSI-X interrupt (WP-04 step 5): delivered straight to the local APIC.
-        idt[XHCI_VECTOR].set_handler_fn(xhci_interrupt_handler);
+        unsafe { idt[XHCI_VECTOR].set_handler_addr(x86_64::VirtAddr::new(crate::asm_stubs::asm_xhci_isr as usize as u64)); }
 
         // Syscall entry point (Milestone 2): shared-memory ABI.
-        idt[0x80]
-            .set_handler_fn(syscall::syscall_interrupt_handler)
-            .set_privilege_level(PrivilegeLevel::Ring3);
+        unsafe {
+            idt[0x80]
+                .set_handler_addr(x86_64::VirtAddr::new(crate::asm_stubs::asm_shm_syscall_isr as usize as u64))
+                .set_privilege_level(PrivilegeLevel::Ring3);
+        }
 
         // Register-based syscall ABI (Phase 2.2): rax=number, rdi/rsi/...=args, return in rax.
         unsafe {
@@ -137,6 +143,7 @@ pub fn init_pics() {
 
 /// Local-APIC spurious interrupt (E-10). Per the SDM, no end-of-interrupt is sent for the
 /// spurious vector — just return.
+#[no_mangle]
 extern "x86-interrupt" fn spurious_interrupt_handler(_stack_frame: InterruptStackFrame) {}
 
 fn is_user_mode(stack_frame: &InterruptStackFrame) -> bool {
@@ -165,11 +172,13 @@ fn terminate_user_and_restart(reason: &'static str, exit_code: u64) -> ! {
     crate::runtime::restart_kernel_loop(reason)
 }
 
+#[no_mangle]
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
     serial::println!("EXCEPTION: BREAKPOINT\n{:#?}", stack_frame);
     vga::println!("EXCEPTION: BREAKPOINT");
 }
 
+#[no_mangle]
 extern "x86-interrupt" fn invalid_opcode_handler(stack_frame: InterruptStackFrame) {
     serial::println!("EXCEPTION: INVALID OPCODE\n{:#?}", stack_frame);
     vga::println!("EXCEPTION: INVALID OPCODE");
@@ -186,6 +195,7 @@ extern "x86-interrupt" fn invalid_opcode_handler(stack_frame: InterruptStackFram
     loop { arch::hlt(); }
 }
 
+#[no_mangle]
 extern "x86-interrupt" fn general_protection_fault_handler(
     stack_frame: InterruptStackFrame,
     error_code: u64,
@@ -207,6 +217,7 @@ extern "x86-interrupt" fn general_protection_fault_handler(
     kernel_halt("general protection fault");
 }
 
+#[no_mangle]
 extern "x86-interrupt" fn page_fault_handler(
     stack_frame: InterruptStackFrame,
     error_code: PageFaultErrorCode,
@@ -238,6 +249,7 @@ extern "x86-interrupt" fn page_fault_handler(
     kernel_halt("page fault");
 }
 
+#[no_mangle]
 extern "x86-interrupt" fn double_fault_handler(
     stack_frame: InterruptStackFrame,
     _error_code: u64,
@@ -252,6 +264,10 @@ extern "x86-interrupt" fn double_fault_handler(
 /// is the stack pointer to resume on (same thread, or another when preemption is armed).
 #[no_mangle]
 pub extern "C" fn timer_dispatch(saved_rsp: u64) -> u64 {
+    #[cfg(feature = "verify")]
+    unsafe {
+        crate::security::record_entry_probe(4, *((saved_rsp + 136) as *const u64), *((saved_rsp + 128) as *const u64));
+    }
     TICKS.fetch_add(1, Ordering::Relaxed);
     crate::syscall::on_timer_tick();
 
@@ -288,6 +304,7 @@ fn _timer_interrupt_handler_rust_unused(_saved_rsp: u64) -> u64 {
     0 // No context switch in simplified version
 }
 
+#[no_mangle]
 extern "x86-interrupt" fn keyboard_interrupt_handler(stack_frame: InterruptStackFrame) {
     let scancode = unsafe { arch::inb(0x60) };
 
@@ -332,6 +349,7 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(stack_frame: InterruptStack
     eoi_external(InterruptIndex::Keyboard.as_u8());
 }
 
+#[no_mangle]
 extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: InterruptStackFrame) {
     crate::mouse::handle_interrupt();
 
@@ -341,6 +359,7 @@ extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: InterruptStackFr
 /// xHCI MSI-X interrupt (WP-04 step 5). The controller acknowledges itself inside `on_interrupt`
 /// (clears EINT/IP and drains the event ring); the message was delivered by the local APIC, so the
 /// end-of-interrupt always goes to the local APIC.
+#[no_mangle]
 extern "x86-interrupt" fn xhci_interrupt_handler(_stack_frame: InterruptStackFrame) {
     crate::xhci::on_interrupt();
     crate::apic::eoi();

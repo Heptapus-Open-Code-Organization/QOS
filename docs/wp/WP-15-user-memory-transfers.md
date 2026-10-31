@@ -16,10 +16,15 @@
 - The small preemptive Ring-3 payload loader uses the same checked copy path.
 - Verification v2 tests real mappings/permission failures, shared ABI/VFS output, and a Ring-3
   register write/exit. It does not advertise full application resource cleanup or all syscalls.
+- The subsequent entry-policy slice clears live DF/AC before Rust on all installed IDT gates,
+  preserving hardware-saved flags. See [ADR-0024](../adr/0024-interrupt-entry-flags.md).
 
 ## Verification contract v2 additions
 
-The runner requires BEGIN/COMPLETE **v2**, the existing boot/frame/W^X/Bell checks, and then:
+This section records the first increment. The current **v3** contract also requires the
+entry-policy markers below; v2-only transcripts no longer satisfy the runner.
+
+The v2 runner required BEGIN/COMPLETE **v2**, the existing boot/frame/W^X/Bell checks, and then:
 
 ```text
 QOS_VERIFY PASS user-copy
@@ -27,6 +32,19 @@ hello from ring3 via register syscall ABI (int 0x81)
 QOS_VERIFY PASS ring3-write-exit
 QOS_VERIFY COMPLETE v2
 ```
+
+After the ordinary Ring-3 write/exit check, v3 runs a separate Ring-3 payload with DF/AC set.
+It exercises timer preemption, both software-interrupt ABIs, invalid-buffer rejection and
+restoration of the user flags. The host requires:
+
+```text
+ring3 negative buffers and entry flags passed
+QOS_VERIFY PASS entry-policy
+QOS_VERIFY COMPLETE v3
+```
+
+BEGIN also changes to v3. Observers require all three entry paths to be exercised with dirty
+saved user flags and clean live kernel flags. No exception/panic allowance is added.
 
 `cargo os-verify` now defaults to `--cpu max`; `--cpu qemu64` exercises the baseline profile.
 CI runs both independently. Artifacts and strict error/timeout behavior are unchanged from
@@ -51,7 +69,9 @@ Artifact examples: `target/qos-verify/run-39568-1793457553944312700` (max) and
 
 - [ ] Address-space locks/frame pinning and concurrent unmap/CoW/demand-paging behavior before
   corresponding #7/#20 SMP/VM features are enabled.
-- [ ] Remaining legacy loader/user-access audit and syscall entry AC/DF policy.
+- [x] Normalize live DF/AC at installed IDT entries; prove timer/shared/register paths and
+  user flag restoration on max and qemu64 (v3, ADR-0024).
+- [ ] Remaining legacy loader/user-access audit and uninstalled exception/NMI entry coverage.
 - [ ] Unified ABI/error/version contract and reachable extended syscall ownership semantics.
 - [ ] Full adversarial Ring-3 buffer corpus, repeated process resource accounting, blocking and
   cancellation integration as #41 matures.
@@ -59,3 +79,7 @@ Artifact examples: `target/qos-verify/run-39568-1793457553944312700` (max) and
 
 This first slice rejects invalid resident ranges before accessing them; it does not implement
 a general kernel page-fault recovery table or establish production security.
+
+Local v3 evidence: both CPU profiles completed all markers with exit 33; max artifact
+`target/qos-verify/run-28712-1793464414102986000`, qemu64 artifact
+`target/qos-verify/run-6812-1793464420426080500`.

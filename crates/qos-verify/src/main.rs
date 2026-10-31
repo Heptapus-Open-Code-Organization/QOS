@@ -10,7 +10,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const MARKERS: &[&str] = &[
     "QOS-OS boot OK (serial)",
     "heap initialized",
-    "QOS_VERIFY BEGIN v2",
+    "QOS_VERIFY BEGIN v3",
     "QOS_VERIFY PASS boot-framebuffer",
     "QOS_VERIFY PASS wx",
     "QOS_VERIFY PASS desktop-frame",
@@ -18,7 +18,9 @@ const MARKERS: &[&str] = &[
     "QOS_VERIFY PASS user-copy",
     "hello from ring3 via register syscall ABI (int 0x81)",
     "QOS_VERIFY PASS ring3-write-exit",
-    "QOS_VERIFY COMPLETE v2",
+    "ring3 negative buffers and entry flags passed",
+    "QOS_VERIFY PASS entry-policy",
+    "QOS_VERIFY COMPLETE v3",
 ];
 
 #[derive(Debug)]
@@ -417,7 +419,7 @@ mod tests {
         )
         .is_err());
         assert!(validate_logs(
-            &(good().replace("QOS_VERIFY COMPLETE v2", "noise QOS_VERIFY COMPLETE v2")),
+            &(good().replace("QOS_VERIFY COMPLETE v3", "noise QOS_VERIFY COMPLETE v3")),
             "",
             Some(33),
             false

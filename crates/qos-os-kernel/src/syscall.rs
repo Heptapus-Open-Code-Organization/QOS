@@ -746,7 +746,10 @@ pub enum SyscallNumber {
 }
 
 // Simplified syscall handler without naked_asm
+#[no_mangle]
 pub extern "x86-interrupt" fn syscall_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    #[cfg(feature = "verify")]
+    crate::security::record_entry_probe(2, _stack_frame.cpu_flags.bits(), _stack_frame.code_segment.0 as u64);
     SYSCALL_COUNT.fetch_add(1, Ordering::Relaxed);
 
     // Process quantum work before handling syscall - allows jobs to progress during polling
@@ -793,8 +796,15 @@ struct SyscallRegs {
     r15: u64, r14: u64, r13: u64, r12: u64, r11: u64, r10: u64,
     r9: u64, r8: u64, rbp: u64, rdi: u64, rsi: u64, rdx: u64,
     rcx: u64, rbx: u64, rax: u64,
-    // hardware iretq frame follows (rip, cs, rflags, rsp, ss) — not needed here.
+    // Hardware iretq frame, after the 15 saved GPRs.
+    saved_rip: u64, saved_cs: u64, saved_rflags: u64, saved_rsp: u64, saved_ss: u64,
 }
+
+const _: () = {
+    assert!(core::mem::offset_of!(SyscallRegs, saved_cs) == 128);
+    assert!(core::mem::offset_of!(SyscallRegs, saved_rflags) == 136);
+    assert!(core::mem::size_of::<SyscallRegs>() == 160);
+};
 
 pub const SYS_EXIT: u64 = 0;
 pub const SYS_WRITE: u64 = 1;
@@ -882,6 +892,8 @@ pub fn verify_uaccess_paths(data: u64) -> bool {
 pub extern "C" fn syscall_dispatch(frame: u64) -> u64 {
     SYSCALL_COUNT.fetch_add(1, Ordering::Relaxed);
     let regs = unsafe { &mut *(frame as *mut SyscallRegs) };
+    #[cfg(feature = "verify")]
+    crate::security::record_entry_probe(1, regs.saved_rflags, regs.saved_cs);
     match regs.rax {
         SYS_EXIT => {
             if crate::kthread::is_user_current() {

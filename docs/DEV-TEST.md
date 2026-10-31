@@ -24,7 +24,7 @@ The canonical automated gate is **`cargo os-verify`**, shared with Linux CI. It 
 separate verification image and requires explicit UEFI/frame/W^X/real-Bell completion and exit
 33; timeout/faults fail. Logs live in `target/qos-verify/run-*`. See
 [WP-14](wp/WP-14-verification-gates.md) for firmware overrides and
-[WP-15](wp/WP-15-user-memory-transfers.md) for the current v2 user-copy/Ring-3 checks and
+[WP-15](wp/WP-15-user-memory-transfers.md) for the current v3 user-copy/Ring-3/entry-policy checks and
 max/qemu64 CPU profiles. The manual
 commands below are exploratory workflows, not substitutes for that gate.
 

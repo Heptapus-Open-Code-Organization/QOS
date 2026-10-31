@@ -60,6 +60,11 @@ asm_iretq_to_user:
     .p2align 4
     .global asm_timer_isr
 asm_timer_isr:
+    # Clear live DF/AC before any Rust code; leave the CPU's saved RFLAGS unchanged.
+    # POPFQ avoids requiring the optional CLAC instruction on older CPUs.
+    pushfq
+    andq $-263169, (%rsp)   # ~(DF | AC), bits 10 and 18
+    popfq
     push %rax
     push %rbx
     push %rcx
@@ -111,6 +116,9 @@ global_asm!(
     .p2align 4
     .global asm_syscall_isr
 asm_syscall_isr:
+    pushfq
+    andq $-263169, (%rsp)   # clear live DF/AC; iretq restores the user's saved flags
+    popfq
     push %rax
     push %rbx
     push %rcx
@@ -150,9 +158,47 @@ asm_syscall_isr:
     options(att_syntax)
 );
 
+// Preserve each hardware frame/error-code layout by jumping, not calling, into the
+// compiler's x86-interrupt handler after clearing live DF/AC. No GPR is modified.
+global_asm!(
+    r#"
+    .section .text
+    .macro sanitized_gate entry, target
+    .p2align 4
+    .global \entry
+\entry:
+    pushfq
+    andq $-263169, (%rsp)
+    popfq
+    jmp \target
+    .endm
+    sanitized_gate asm_shm_syscall_isr, syscall_interrupt_handler
+    sanitized_gate asm_breakpoint_isr, breakpoint_handler
+    sanitized_gate asm_invalid_opcode_isr, invalid_opcode_handler
+    sanitized_gate asm_gpf_isr, general_protection_fault_handler
+    sanitized_gate asm_page_fault_isr, page_fault_handler
+    sanitized_gate asm_double_fault_isr, double_fault_handler
+    sanitized_gate asm_keyboard_isr, keyboard_interrupt_handler
+    sanitized_gate asm_mouse_isr, mouse_interrupt_handler
+    sanitized_gate asm_xhci_isr, xhci_interrupt_handler
+    sanitized_gate asm_spurious_isr, spurious_interrupt_handler
+    "#,
+    options(att_syntax)
+);
+
 extern "C" {
     /// Raw preemptive timer ISR entry (installed into IDT[Timer] via `set_handler_addr`).
     pub fn asm_timer_isr();
     /// Raw register-based syscall ISR entry (installed into IDT[0x81]).
     pub fn asm_syscall_isr();
+    pub fn asm_shm_syscall_isr();
+    pub fn asm_breakpoint_isr();
+    pub fn asm_invalid_opcode_isr();
+    pub fn asm_gpf_isr();
+    pub fn asm_page_fault_isr();
+    pub fn asm_double_fault_isr();
+    pub fn asm_keyboard_isr();
+    pub fn asm_mouse_isr();
+    pub fn asm_xhci_isr();
+    pub fn asm_spurious_isr();
 }
