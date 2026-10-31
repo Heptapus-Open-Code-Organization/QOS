@@ -10,7 +10,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const MARKERS: &[&str] = &[
     "QOS-OS boot OK (serial)",
     "heap initialized",
-    "QOS_VERIFY BEGIN v3",
+    "QOS_VERIFY BEGIN v4",
     "QOS_VERIFY PASS boot-framebuffer",
     "QOS_VERIFY PASS wx",
     "QOS_VERIFY PASS desktop-frame",
@@ -20,7 +20,10 @@ const MARKERS: &[&str] = &[
     "QOS_VERIFY PASS ring3-write-exit",
     "ring3 negative buffers and entry flags passed",
     "QOS_VERIFY PASS entry-policy",
-    "QOS_VERIFY COMPLETE v3",
+    "ring3 ABI contract passed",
+    "user exit: OP_EXIT (code=0) -> process reaped; kernel survives",
+    "QOS_VERIFY PASS abi-contract",
+    "QOS_VERIFY COMPLETE v4",
 ];
 
 #[derive(Debug)]
@@ -230,9 +233,8 @@ fn run() -> Result<()> {
     fs::write(
         output.join("result.txt"),
         match &verification {
-            Ok(()) => {
-                "PASS: UEFI/framebuffer/W^X/desktop/Bell/user-copy/Ring-3 write-exit\n".to_owned()
-            }
+            Ok(()) => "PASS: UEFI/framebuffer/W^X/desktop/Bell/user-copy/Ring-3/entry-policy/ABI\n"
+                .to_owned(),
             Err(error) => format!("FAIL: {error}\n"),
         },
     )?;
@@ -419,7 +421,7 @@ mod tests {
         )
         .is_err());
         assert!(validate_logs(
-            &(good().replace("QOS_VERIFY COMPLETE v3", "noise QOS_VERIFY COMPLETE v3")),
+            &(good().replace("QOS_VERIFY COMPLETE v4", "noise QOS_VERIFY COMPLETE v4")),
             "",
             Some(33),
             false
