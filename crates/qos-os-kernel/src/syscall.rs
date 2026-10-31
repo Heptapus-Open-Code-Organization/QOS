@@ -800,27 +800,79 @@ pub const SYS_EXIT: u64 = 0;
 pub const SYS_WRITE: u64 = 1;
 pub const SYS_GETTICKS: u64 = 2;
 
-/// Validate that `[ptr, ptr+len)` is mapped in the active (process) address space. Used to
-/// stop a user process from making the kernel read unmapped/kernel memory via a syscall.
-fn user_ptr_ok(ptr: u64, len: usize) -> bool {
-    use x86_64::structures::paging::{Mapper, Page, Size4KiB};
-    use x86_64::VirtAddr;
-    if ptr == 0 || len == 0 || len > 4096 {
-        return false;
-    }
-    let Some(end) = ptr.checked_add((len - 1) as u64) else { return false };
-    let mut mapper = unsafe { crate::memory::init(crate::memory::phys_offset()) };
-    let mut page = Page::<Size4KiB>::containing_address(VirtAddr::new(ptr));
-    let last = Page::<Size4KiB>::containing_address(VirtAddr::new(end));
-    loop {
-        if mapper.translate_page(page).is_err() {
-            return false;
+#[cfg(feature = "userabi")]
+const _: () = {
+    assert!(core::mem::size_of::<ShmCall>() == 48);
+    assert!(core::mem::size_of::<SubmitHdr>() == 24);
+    assert!(core::mem::size_of::<VfsHdr>() == 24);
+};
+
+#[cfg(feature = "verify")]
+pub fn verify_rejected_frame() -> bool {
+    let mut before = [0u8; 48];
+    let mut after = [0u8; 48];
+    if crate::uaccess::copy_from_user(ABI_CALL_ADDR, &mut before).is_err() { return false; }
+    handle_userdemo_abi();
+    crate::uaccess::copy_from_user(ABI_CALL_ADDR, &mut after).is_ok() && before == after
+}
+
+#[cfg(feature = "verify")]
+pub fn verify_uaccess_paths(data: u64) -> bool {
+    // Test production dispatchers using an isolated CR3; the separate Ring-3 smoke
+    // subsequently exercises the hardware int 0x81 entry/return path.
+    for ptr in [0, qos_uaccess::USER_LIMIT, 0x8000_0000_0000, u64::MAX] {
+        let mut regs: SyscallRegs = unsafe { core::mem::zeroed() };
+        regs.rax = SYS_WRITE;
+        regs.rdi = ptr;
+        regs.rsi = 1;
+        syscall_dispatch(&mut regs as *mut _ as u64);
+        if regs.rax != u64::MAX { return false; }
+        for operation in [crate::syscall_ext::syscall_nr::SYS_READ, crate::syscall_ext::syscall_nr::SYS_WRITE] {
+            if crate::syscall_ext::handle_syscall(operation, 1, ptr, 1) != crate::syscall_ext::EFAULT {
+                return false;
+            }
         }
-        if page == last {
-            return true;
-        }
-        page = Page::containing_address(page.start_address() + 4096u64);
     }
+    let mut frame = [0u8; core::mem::size_of::<ShmCall>()];
+    frame[..4].copy_from_slice(&qos_abi::shm::SHM_ABI_VERSION.to_le_bytes());
+    if crate::uaccess::copy_to_user(ABI_CALL_ADDR, &frame).is_err() { return false; }
+    handle_userdemo_abi(); // GetAbiVersion
+    if crate::uaccess::copy_from_user(ABI_CALL_ADDR, &mut frame).is_err()
+        || u64::from_le_bytes(frame[16..24].try_into().unwrap()) != qos_abi::ABI_VERSION as u64
+    { return false; }
+
+    frame[4..8].copy_from_slice(&qos_abi::shm::OP_SUBMIT_IR.to_le_bytes());
+    frame[32..40].copy_from_slice(&0x8000_0000_0000u64.to_le_bytes());
+    frame[40..48].copy_from_slice(&32u64.to_le_bytes());
+    if crate::uaccess::copy_to_user(ABI_CALL_ADDR, &frame).is_err() { return false; }
+    handle_userdemo_abi();
+    if crate::uaccess::copy_from_user(ABI_CALL_ADDR, &mut frame).is_err()
+        || u32::from_le_bytes(frame[8..12].try_into().unwrap()) != qos_abi::shm::STATUS_ERR
+    { return false; }
+
+    const PATH: &[u8] = b"/ram/uaccess-check.txt";
+    const CONTENT: &[u8] = b"checked-copy";
+    if crate::vfs::write(PATH, CONTENT).is_err() { return false; }
+    let mut packet = [0u8; 128];
+    packet[..4].copy_from_slice(&qos_abi::shm::VFS_HDR_VERSION.to_le_bytes());
+    packet[4..8].copy_from_slice(&qos_abi::shm::VFS_OP_READ.to_le_bytes());
+    packet[8..12].copy_from_slice(&(PATH.len() as u32).to_le_bytes());
+    packet[16..20].copy_from_slice(&32u32.to_le_bytes());
+    packet[24..24 + PATH.len()].copy_from_slice(PATH);
+    if crate::uaccess::copy_to_user(data, &packet).is_err() { return false; }
+    frame[4..8].copy_from_slice(&qos_abi::shm::OP_VFS_IO.to_le_bytes());
+    frame[32..40].copy_from_slice(&data.to_le_bytes());
+    frame[40..48].copy_from_slice(&((24 + PATH.len() + 32) as u64).to_le_bytes());
+    if crate::uaccess::copy_to_user(ABI_CALL_ADDR, &frame).is_err() { return false; }
+    handle_userdemo_abi();
+    let result = crate::uaccess::copy_from_user(ABI_CALL_ADDR, &mut frame).is_ok()
+        && u32::from_le_bytes(frame[8..12].try_into().unwrap()) == qos_abi::shm::STATUS_OK
+        && u64::from_le_bytes(frame[16..24].try_into().unwrap()) == CONTENT.len() as u64
+        && crate::uaccess::copy_from_user(data, &mut packet).is_ok()
+        && u32::from_le_bytes(packet[12..16].try_into().unwrap()) == CONTENT.len() as u32
+        && &packet[24 + PATH.len()..24 + PATH.len() + CONTENT.len()] == CONTENT;
+    let _ = crate::vfs::remove(PATH);
+    result
 }
 
 /// C callback for `asm_syscall_isr` (int 0x81). Reads the syscall number/args from the saved
@@ -840,9 +892,9 @@ pub extern "C" fn syscall_dispatch(frame: u64) -> u64 {
         }
         SYS_WRITE => {
             let (ptr, len) = (regs.rdi, regs.rsi as usize);
-            if user_ptr_ok(ptr, len) {
-                let bytes = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
-                for &b in bytes {
+            let mut bytes = [0u8; crate::uaccess::MAX_COPY];
+            if len <= bytes.len() && crate::uaccess::copy_from_user(ptr, &mut bytes[..len]).is_ok() {
+                for &b in &bytes[..len] {
                     crate::serial_print!("{}", b as char);
                 }
                 regs.rax = len as u64;
@@ -863,47 +915,36 @@ pub extern "C" fn syscall_dispatch(frame: u64) -> u64 {
 }
 
 #[cfg(feature = "userabi")]
-fn user_range_mapped(ptr: u64, len: usize) -> bool {
-    use x86_64::structures::paging::{Mapper, Page, Size4KiB};
-    use x86_64::VirtAddr;
-
-    if ptr == 0 || len == 0 {
-        return false;
+fn handle_userdemo_abi() -> u64 {
+    // Snapshot only after validating both input and output permissions. The current wire
+    // frame is 48 bytes of integers; return fields are encoded explicitly below.
+    let mut raw = [0u8; core::mem::size_of::<ShmCall>()];
+    if crate::uaccess::validate(ABI_CALL_ADDR, raw.len(), crate::uaccess::Access::Write).is_err()
+        || crate::uaccess::copy_from_user(ABI_CALL_ADDR, &mut raw).is_err()
+    {
+        crate::serial_println!("syscall abi: rejected inaccessible call frame");
+        return 0;
     }
-
-    let Some(end_u64) = ptr.checked_add((len - 1) as u64) else {
-        return false;
-    };
-
-    let start = VirtAddr::new(ptr);
-    let end = VirtAddr::new(end_u64);
-
-    let start_page = Page::<Size4KiB>::containing_address(start);
-    let end_page = Page::<Size4KiB>::containing_address(end);
-
-    // Validate mappings in the currently active address space (which is the user CR3
-    // while in the user ABI handler).
-    let mut mapper = unsafe { crate::memory::init(crate::memory::phys_offset()) };
-    let mut page = start_page;
-    loop {
-        if mapper.translate_page(page).is_err() {
-            return false;
+    let mut call = unsafe { core::ptr::read_unaligned(raw.as_ptr() as *const ShmCall) };
+    let root = crate::memory::current_cr3_frame();
+    let result = handle_userdemo_call(&mut call);
+    // A scheduled legacy exit may already have switched address spaces.
+    if crate::memory::current_cr3_frame() == root {
+        raw[8..12].copy_from_slice(&call.status.to_le_bytes());
+        raw[16..24].copy_from_slice(&call.ret0.to_le_bytes());
+        raw[24..32].copy_from_slice(&call.ret1.to_le_bytes());
+        if crate::uaccess::copy_to_user(ABI_CALL_ADDR, &raw).is_err() {
+            crate::serial_println!("syscall abi: rejected inaccessible response frame");
         }
-        if page == end_page {
-            break;
-        }
-        let next = page.start_address().as_u64().saturating_add(4096);
-        page = Page::containing_address(VirtAddr::new(next));
     }
-    true
+    result
 }
 
 #[cfg(feature = "userabi")]
-fn handle_userdemo_abi() -> u64 {
+fn handle_userdemo_call(call: &mut ShmCall) -> u64 {
     // Minimal shared-memory ABI:
     // User fills `qos_abi::shm::ShmCall` at ABI_CALL_ADDR and triggers int 0x80.
     // Kernel reads op and writes status/ret*.
-    let call = unsafe { &mut *(ABI_CALL_ADDR as *mut ShmCall) };
 
     let abi_version = unsafe { core::ptr::read_volatile(&call.abi_version) };
     if abi_version != qos_abi::shm::SHM_ABI_VERSION {
@@ -989,7 +1030,7 @@ fn handle_userdemo_abi() -> u64 {
                 return 0;
             }
 
-            if !user_range_mapped(user_ptr_u64, total) {
+            if crate::uaccess::validate(user_ptr_u64, total, crate::uaccess::Access::Read).is_err() {
                 unsafe {
                     core::ptr::write_volatile(&mut call.status, qos_abi::shm::STATUS_ERR);
                 }
@@ -1006,11 +1047,12 @@ fn handle_userdemo_abi() -> u64 {
                 // Copy from user memory into a small stack buffer. This keeps the kernel allocation-free
                 // inside the interrupt handler while still proving real payload flow.
                 let mut buf = [0u8; MAX_IR_BYTES];
-                unsafe {
-                    core::ptr::copy_nonoverlapping(user_ptr, buf.as_mut_ptr(), total);
+                if crate::uaccess::copy_from_user(user_ptr_u64, &mut buf[..total]).is_err() {
+                    call.status = qos_abi::shm::STATUS_ERR;
+                    return 0;
                 }
 
-                let hdr = unsafe { &*(buf.as_ptr() as *const SubmitHdr) };
+                let hdr = unsafe { core::ptr::read_unaligned(buf.as_ptr() as *const SubmitHdr) };
                 if hdr.version != qos_abi::shm::SUBMIT_HDR_VERSION {
                     unsafe {
                         core::ptr::write_volatile(&mut call.status, qos_abi::shm::STATUS_ERR);
@@ -1112,7 +1154,7 @@ fn handle_userdemo_abi() -> u64 {
                 return 0;
             }
 
-            if !user_range_mapped(user_ptr_u64, total) {
+            if crate::uaccess::validate(user_ptr_u64, total, crate::uaccess::Access::Write).is_err() {
                 unsafe {
                     core::ptr::write_volatile(&mut call.status, qos_abi::shm::STATUS_ERR);
                 }
@@ -1126,8 +1168,9 @@ fn handle_userdemo_abi() -> u64 {
 
             // Copy the entire user buffer into a stack buffer first (for safe parsing).
             let mut buf = [0u8; MAX_IR_BYTES];
-            unsafe {
-                core::ptr::copy_nonoverlapping(user_ptr as *const u8, buf.as_mut_ptr(), total);
+            if crate::uaccess::copy_from_user(user_ptr_u64, &mut buf[..total]).is_err() {
+                call.status = qos_abi::shm::STATUS_ERR;
+                return 0;
             }
 
             let mut hdr = unsafe { core::ptr::read_unaligned(buf.as_ptr() as *const VfsHdr) };
@@ -1169,10 +1212,10 @@ fn handle_userdemo_abi() -> u64 {
             let path = &buf[path_off..path_off + path_len];
 
             // Prepare output slice pointer (user memory) for read/list.
-            let user_data_ptr = unsafe { user_ptr.add(data_off) };
+            let user_data_ptr = user_ptr_u64 + data_off as u64;
 
             let mut bytes_written: u64 = 0;
-            let ok: bool;
+            let mut ok: bool;
 
             ok = match hdr.vfs_op {
                 qos_abi::shm::VFS_OP_REMOVE => crate::vfs::remove(path).is_ok(),
@@ -1183,12 +1226,13 @@ fn handle_userdemo_abi() -> u64 {
                 qos_abi::shm::VFS_OP_READ => match crate::vfs::read(path) {
                     Ok(bytes) => {
                         let n = core::cmp::min(bytes.len(), data_cap);
-                        unsafe {
-                            core::ptr::copy_nonoverlapping(bytes.as_ptr(), user_data_ptr, n);
+                        if crate::uaccess::copy_to_user(user_data_ptr, &bytes[..n]).is_ok() {
+                            bytes_written = n as u64;
+                            hdr.data_len = n as u32;
+                            true
+                        } else {
+                            false
                         }
-                        bytes_written = n as u64;
-                        hdr.data_len = n as u32;
-                        true
                     }
                     Err(_) => false,
                 },
@@ -1205,12 +1249,13 @@ fn handle_userdemo_abi() -> u64 {
                         false
                     } else {
                         let n = core::cmp::min(out.len(), data_cap);
-                        unsafe {
-                            core::ptr::copy_nonoverlapping(out.as_ptr(), user_data_ptr, n);
+                        if crate::uaccess::copy_to_user(user_data_ptr, &out[..n]).is_ok() {
+                            bytes_written = n as u64;
+                            hdr.data_len = n as u32;
+                            true
+                        } else {
+                            false
                         }
-                        bytes_written = n as u64;
-                        hdr.data_len = n as u32;
-                        true
                     }
                 }
                 _ => false,
@@ -1223,8 +1268,12 @@ fn handle_userdemo_abi() -> u64 {
             let log_data_cap = hdr.data_cap;
 
             // Write updated header back to user memory (data_len for read/list).
+            unsafe { core::ptr::write_unaligned(buf.as_mut_ptr() as *mut VfsHdr, hdr); }
+            if crate::uaccess::copy_to_user(user_ptr_u64, &buf[..header_len]).is_err() {
+                ok = false;
+                bytes_written = 0;
+            }
             unsafe {
-                core::ptr::write_unaligned(user_ptr as *mut VfsHdr, hdr);
                 core::ptr::write_volatile(&mut call.ret0, bytes_written);
                 core::ptr::write_volatile(
                     &mut call.status,

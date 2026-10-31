@@ -6,6 +6,12 @@
 - Date: 2026-10-31
 - Publication and Linux CI evidence: tracked on #25; local verification alone does not close it
 
+The initial slice was published in `1108fa5`; all four jobs passed in
+[the Linux CI run](https://github.com/Heptapus-Open-Code-Organization/QOS/actions/runs/41210140971).
+[WP-15](WP-15-user-memory-transfers.md) extends the current guest contract to v2 with checked
+user copies, Ring-3 write/exit and max/qemu64 CPU profiles. The v1 contract below records the
+original slice; the current marker list is in `qos-verify` and WP-15.
+
 ## Problem and first slice
 
 The old `cargo os-verify` alias referenced a disabled, BIOS-era xtask. The CI smoke job built
@@ -98,7 +104,8 @@ desired status checks separately; this working-tree change does not change GitHu
 - [x] Full local host suite: 75 tests + one doctest passed; one subprocess fixture is ignored
   by the parent harness and invoked by its timeout test. `no_std` and interactive image builds
   passed; the interactive image SHA-256 was unchanged by the subsequent full verify command.
-- [ ] Publish changes and observe the required Linux GitHub Actions job on a PR.
+- [x] Publish the initial slice and observe its Linux GitHub Actions run (1108fa5, four jobs
+  passed). Branch protection selection and review workflows remain separate repository settings.
 - [ ] Two-boot storage persistence with a disposable AHCI data image and explicit assertions.
 - [ ] Ring-3 syscall/isolation/cleanup/negative checks as #40/#41 mature.
 - [ ] Background worker/cancel/load responsiveness and wider quantum correctness checks.

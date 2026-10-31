@@ -286,6 +286,7 @@ dependencies = [
  "qos-acpi",
  "qos-driver",
  "qos-gfx",
+ "qos-uaccess",
  "qos-ui",
  "spin",
  "x86_64",
@@ -359,6 +360,10 @@ dependencies = [
  "bootloader",
  "os",
 ]
+
+[[package]]
+name = "qos-uaccess"
+version = "0.1.0"
 
 [[package]]
 name = "qos-ui"

@@ -1,0 +1,7 @@
+[package]
+name = "qos-uaccess"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+repository.workspace = true
+description = "Portable no_std user-memory range and x86-64 page permission checks"

@@ -29,6 +29,7 @@ mod splash;     // Boot splash screen
 mod syscall;
 mod tasking;
 mod user; // ✅ ENABLED: LLVM bug fixed with Docker Linux environment
+mod uaccess;     // Checked user-memory transfer (ADR-0023).
 mod ui;
 mod vga;
 mod vga13h;     // VGA Mode 13h (320x200x256) pixel graphics — ADR-0013 Phase 1

@@ -30,8 +30,9 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-core-${{ hashFiles('**/Cargo.lock') }}
-      - run: cargo test -p qos-abi -p qos-gfx -p qos-ui -p qos-driver -p qos-acpi -p qos-core -p qos-verify --features qos-core/std
+      - run: cargo test -p qos-abi -p qos-gfx -p qos-ui -p qos-driver -p qos-acpi -p qos-core -p qos-verify -p qos-uaccess --features qos-core/std
       - run: cargo check -p qos-core --no-default-features --target x86_64-unknown-none
+      - run: cargo check -p qos-uaccess --target x86_64-unknown-none
 
   build-kernel:
     name: Build kernel ELF
@@ -75,9 +76,13 @@ jobs:
           if-no-files-found: error
 
   smoke-uefi:
-    name: Required UEFI boot and real quantum smoke
+    name: Required UEFI smoke (${{ matrix.cpu }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        cpu: [qemu64, max]
     steps:
       - uses: actions/checkout@v4
       - name: Show toolchain
@@ -92,12 +97,12 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-verify-${{ hashFiles('**/Cargo.lock') }}
       - name: Build verification image and require guest completion
-        run: cargo os-verify
+        run: cargo os-verify --cpu ${{ matrix.cpu }}
       - name: Upload verification diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: qos-uefi-verification
+          name: qos-uefi-verification-${{ matrix.cpu }}
           path: target/qos-verify/
           if-no-files-found: warn
           retention-days: 7

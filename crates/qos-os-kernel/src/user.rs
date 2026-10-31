@@ -505,10 +505,7 @@ fn spawn_ring3(payload: &[u8]) -> Ring3Handle {
         // Copy the payload into the code page. It is only mapped in the new CR3, so switch
         // there to write, then return to the kernel CR3.
         let saved = memory::switch_cr3(cr3);
-        unsafe {
-            let dst: *mut u8 = VirtAddr::new(USER_CODE_START).as_mut_ptr();
-            core::ptr::copy_nonoverlapping(payload.as_ptr(), dst, payload.len());
-        }
+        crate::uaccess::copy_to_user(USER_CODE_START, payload).expect("load bounded Ring-3 payload");
         memory::switch_cr3(saved);
 
         // W^X (Phase 2.3): after loading, demote the code page to read-execute (drop WRITABLE).

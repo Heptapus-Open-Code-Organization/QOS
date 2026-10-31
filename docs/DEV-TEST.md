@@ -12,7 +12,7 @@ cargo image
 cargo os-build            # = build -p os --target x86_64-unknown-none -Zbuild-std=core,alloc
 
 # Host unit tests for the portable crates
-cargo test -p qos-abi -p qos-gfx -p qos-ui -p qos-driver -p qos-acpi -p qos-core -p qos-verify --features qos-core/std
+cargo test -p qos-abi -p qos-gfx -p qos-ui -p qos-driver -p qos-acpi -p qos-core -p qos-verify -p qos-uaccess --features qos-core/std
 ```
 
 Toolchain is pinned (nightly-2024-12-01) in `rust-toolchain.toml`. `.cargo/config.toml` sets
@@ -23,7 +23,9 @@ Toolchain is pinned (nightly-2024-12-01) in `rust-toolchain.toml`. `.cargo/confi
 The canonical automated gate is **`cargo os-verify`**, shared with Linux CI. It builds the
 separate verification image and requires explicit UEFI/frame/W^X/real-Bell completion and exit
 33; timeout/faults fail. Logs live in `target/qos-verify/run-*`. See
-[WP-14](wp/WP-14-verification-gates.md) for firmware overrides and coverage limits. The manual
+[WP-14](wp/WP-14-verification-gates.md) for firmware overrides and
+[WP-15](wp/WP-15-user-memory-transfers.md) for the current v2 user-copy/Ring-3 checks and
+max/qemu64 CPU profiles. The manual
 commands below are exploratory workflows, not substitutes for that gate.
 
 QEMU is at `C:\Program Files\qemu`; OVMF firmware ships with it:

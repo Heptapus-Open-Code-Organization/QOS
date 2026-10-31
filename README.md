@@ -93,7 +93,7 @@ cargo os-build              # = cargo build -p os --target x86_64-unknown-none -
 # Build a bootable UEFI image (written to dist/qos-uefi.img)
 cargo image
 
-# Strict UEFI smoke (framebuffer, W^X, desktop frame, real Bell simulation)
+# Strict UEFI smoke (framebuffer, W^X, desktop, Bell, checked copies and Ring-3 write/exit)
 cargo os-verify
 ```
 
@@ -103,7 +103,8 @@ A Docker-based build is also available (see `Dockerfile` / `docker-compose.yml` 
 `cargo os-verify` requires QEMU and a matching OVMF/edk2 code/vars pair. It builds a separate
 verification image, rejects timeout/guest faults/missing completion markers, and saves logs
 under `target/qos-verify/`. See [WP-14](docs/wp/WP-14-verification-gates.md) for configuration,
-the exact checks and the remaining process/storage/input coverage.
+the initial checks and [WP-15](docs/wp/WP-15-user-memory-transfers.md) for the current v2
+user-copy/Ring-3 coverage. Full process/storage/input coverage remains incomplete.
 
 ## Running on real hardware and VMs
 

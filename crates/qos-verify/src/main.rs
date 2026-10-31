@@ -10,12 +10,15 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const MARKERS: &[&str] = &[
     "QOS-OS boot OK (serial)",
     "heap initialized",
-    "QOS_VERIFY BEGIN v1",
+    "QOS_VERIFY BEGIN v2",
     "QOS_VERIFY PASS boot-framebuffer",
     "QOS_VERIFY PASS wx",
     "QOS_VERIFY PASS desktop-frame",
     "QOS_VERIFY PASS quantum-bell",
-    "QOS_VERIFY COMPLETE v1",
+    "QOS_VERIFY PASS user-copy",
+    "hello from ring3 via register syscall ABI (int 0x81)",
+    "QOS_VERIFY PASS ring3-write-exit",
+    "QOS_VERIFY COMPLETE v2",
 ];
 
 #[derive(Debug)]
@@ -24,6 +27,7 @@ struct Options {
     image: PathBuf,
     log_dir: PathBuf,
     timeout: Duration,
+    cpu: String,
 }
 
 impl Options {
@@ -38,11 +42,18 @@ impl Options {
             image: root.join("dist/qos-uefi-verify.img"),
             log_dir: root.join("target/qos-verify"),
             timeout: Duration::from_secs(120),
+            cpu: "max".into(),
         };
         let mut args = args.into_iter();
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--skip-build" => options.skip_build = true,
+                "--cpu" => {
+                    options.cpu = args
+                        .next()
+                        .filter(|s| !s.is_empty())
+                        .ok_or("--cpu needs a model")?
+                }
                 "--image" => options.image = args.next().ok_or("--image needs a path")?.into(),
                 "--log-dir" => {
                     options.log_dir = args.next().ok_or("--log-dir needs a path")?.into()
@@ -73,7 +84,7 @@ fn main() {
 fn run() -> Result<()> {
     let Some(options) = Options::parse(env::args().skip(1))? else {
         println!(
-            "cargo os-verify [--skip-build] [--timeout-secs 120] [--image PATH] [--log-dir BASE]\n\
+            "cargo os-verify [--skip-build] [--timeout-secs 120] [--cpu max] [--image PATH] [--log-dir BASE]\n\
                   QEMU_EXE, QEMU_UEFI_CODE and QEMU_UEFI_VARS override discovery.\n\
                   Requires a matching non-Secure-Boot OVMF/edk2 code/vars pair.\n\
                   Only exit 33 plus all smoke markers succeeds; timeout never succeeds."
@@ -172,6 +183,7 @@ fn run() -> Result<()> {
         "none",
         "-no-reboot",
     ]);
+    command.args(["-cpu", &options.cpu]);
     fs::write(output.join("command.txt"), format!(
         "image: {}\nfirmware code: {}\nfirmware vars: {}\ntimeout: {:?}\nscratch: {}\ncommand: {command:?}\n",
         options.image.display(), code.display(), vars.display(), options.timeout, scratch.display(),
@@ -216,7 +228,9 @@ fn run() -> Result<()> {
     fs::write(
         output.join("result.txt"),
         match &verification {
-            Ok(()) => "PASS: UEFI/framebuffer/W^X/desktop-frame/real Bell smoke\n".to_owned(),
+            Ok(()) => {
+                "PASS: UEFI/framebuffer/W^X/desktop/Bell/user-copy/Ring-3 write-exit\n".to_owned()
+            }
             Err(error) => format!("FAIL: {error}\n"),
         },
     )?;
@@ -403,7 +417,7 @@ mod tests {
         )
         .is_err());
         assert!(validate_logs(
-            &(good().replace("QOS_VERIFY COMPLETE v1", "noise QOS_VERIFY COMPLETE v1")),
+            &(good().replace("QOS_VERIFY COMPLETE v2", "noise QOS_VERIFY COMPLETE v2")),
             "",
             Some(33),
             false
@@ -429,6 +443,7 @@ mod tests {
             assert!(Options::parse(["--timeout-secs".into(), value.into()]).is_err());
         }
         assert!(Options::parse(["--image".into()]).is_err());
+        assert!(Options::parse(["--cpu".into()]).is_err());
         assert!(Options::parse(["--unknown".into()]).is_err());
         assert!(Options::parse(["--help".into()]).unwrap().is_none());
     }
