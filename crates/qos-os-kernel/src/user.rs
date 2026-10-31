@@ -580,6 +580,120 @@ pub fn spawn_ring3_entry_probe() -> Ring3Handle {
     spawn_ring3(unsafe { core::slice::from_raw_parts(start, length) })
 }
 
+#[cfg(feature = "verify")]
+core::arch::global_asm!(
+    r#"
+    .section .rodata.qos_abi_probe,"a"
+    .p2align 4
+    .global qos_abi_probe_start
+qos_abi_probe_start:
+    # Literal v1 numbers/layout are intentional: this is an independent wire client.
+    movabsq $0x123456789abcdef0, %r12
+    mov %r12, %rdi
+    mov $3, %eax
+    int $0x81
+    cmp $1, %rax
+    jne qos_abi_probe_fail
+    cmp %r12, %rdi
+    jne qos_abi_probe_fail
+    movabsq $0x123456789abcdef0, %r13
+    cmp %r13, %r12
+    jne qos_abi_probe_fail
+
+    mov $-1, %rax
+    int $0x81
+    cmp $-1, %rax
+    jne qos_abi_probe_fail
+
+    # Empty writes ignore the address; both null and noncanonical pointers are no-ops.
+    xor %edi, %edi
+    xor %esi, %esi
+    mov $1, %eax
+    int $0x81
+    test %rax, %rax
+    jne qos_abi_probe_fail
+    movabsq $0x800000000000, %rdi
+    mov $1, %eax
+    int $0x81
+    test %rax, %rax
+    jne qos_abi_probe_fail
+
+    .macro qos_abi_request version, operation
+    movl $\version, 0x40010000
+    movl $\operation, 0x40010004
+    movl $-1, 0x40010008
+    movl $0x12345678, 0x4001000c
+    movq $-1, 0x40010010
+    movq $-1, 0x40010018
+    movq $-1, 0x40010020
+    movq $123, 0x40010028
+    int $0x80
+    cmpl $\version, 0x40010000
+    jne qos_abi_probe_fail
+    cmpl $\operation, 0x40010004
+    jne qos_abi_probe_fail
+    cmpl $0x12345678, 0x4001000c
+    jne qos_abi_probe_fail
+    cmpq $-1, 0x40010020
+    jne qos_abi_probe_fail
+    cmpq $123, 0x40010028
+    jne qos_abi_probe_fail
+    cmpq $0, 0x40010018
+    jne qos_abi_probe_fail
+    .endm
+
+    .macro qos_abi_error version, operation
+    qos_abi_request \version, \operation
+    cmpl $1, 0x40010008
+    jne qos_abi_probe_fail
+    cmpq $0, 0x40010010
+    jne qos_abi_probe_fail
+    .endm
+
+    qos_abi_error 99, 4       # Wrong version must reject even OP_EXIT.
+    qos_abi_error 1, -1       # Unknown operation.
+    qos_abi_error 1, 2        # Unknown job handle.
+    qos_abi_request 1, 0
+    cmpl $0, 0x40010008
+    jne qos_abi_probe_fail
+    cmpq $1, 0x40010010
+    jne qos_abi_probe_fail
+
+    lea qos_abi_probe_message(%rip), %rdi
+    mov $(qos_abi_probe_message_end-qos_abi_probe_message), %esi
+    mov $1, %eax
+    int $0x81
+    cmp $(qos_abi_probe_message_end-qos_abi_probe_message), %rax
+    jne qos_abi_probe_fail
+
+    # Shared exit must reap this process and return control to the kernel verifier.
+    movl $4, 0x40010004
+    movq $0, 0x40010020
+    int $0x80
+qos_abi_probe_fail:
+    ud2
+qos_abi_probe_message:
+    .ascii "ring3 ABI contract passed\n"
+qos_abi_probe_message_end:
+    .global qos_abi_probe_end
+qos_abi_probe_end:
+    "#,
+    options(att_syntax)
+);
+
+#[cfg(feature = "verify")]
+pub fn spawn_ring3_abi_probe() -> Ring3Handle {
+    extern "C" {
+        static qos_abi_probe_start: u8;
+        static qos_abi_probe_end: u8;
+    }
+    let start = core::ptr::addr_of!(qos_abi_probe_start);
+    let length = core::ptr::addr_of!(qos_abi_probe_end) as usize - start as usize;
+    assert!(length <= crate::uaccess::MAX_COPY);
+    // Same immutable, self-contained payload contract as the entry probe above.
+    spawn_ring3(unsafe { core::slice::from_raw_parts(start, length) })
+}
+
 /// Build a Ring-3 process running `payload` in its own address space, ready to hand to the
 /// preemptive scheduler (Phase 2.1b).
 fn spawn_ring3(payload: &[u8]) -> Ring3Handle {

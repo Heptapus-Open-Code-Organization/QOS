@@ -33,6 +33,7 @@ jobs:
       - run: cargo test -p qos-abi -p qos-gfx -p qos-ui -p qos-driver -p qos-acpi -p qos-core -p qos-verify -p qos-uaccess --features qos-core/std
       - run: cargo check -p qos-core --no-default-features --target x86_64-unknown-none
       - run: cargo check -p qos-uaccess --target x86_64-unknown-none
+      - run: cargo check -p qos-abi --target x86_64-unknown-none
 
   build-kernel:
     name: Build kernel ELF

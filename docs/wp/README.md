@@ -35,6 +35,7 @@ Canonical open issues #19-#28 supersede their already-closed duplicates #29-#38.
 | [WP-13](WP-13-quantum-safe-security.md) | Quantum-safe security: PQC, kernel crypto, secure channels | E-54 | (new ADR) | [#19](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/19) | 🔴 not started |
 | [WP-14](WP-14-verification-gates.md) | Truthful UEFI verification and CI gates | E-90 | — | [#25](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/25) | 🟡 first slice published; Linux CI passed |
 | [WP-15](WP-15-user-memory-transfers.md) | Checked resident user-memory transfers | E-30/31 | ADR-0023 | [#40](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/40) | 🟡 bounded copy slice |
+| [WP-16](WP-16-syscall-abi-contract.md) | Current syscall ABI contract and real shared exit | E-30/31 | ADR-0025 | [#40](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/40) | 🟡 current v1 contract slice |
 
 All remaining epics are tracked as detailed [GitHub issues](https://github.com/Heptapus-Open-Code-Organization/QOS/issues)
 with milestones M1–M4: PCIe ECAM + MSI (#8) · block layer + NVMe/virtio-blk (#9) · VMM

@@ -140,6 +140,13 @@ Do not begin an unbounded rewrite of the kernel, desktop and quantum engine toge
 
 ## Completion record for every implementation slice
 
+Published follow-up: [PR #47](https://github.com/Heptapus-Open-Code-Organization/QOS/pull/47)
+merged as `e43c918`; all five main Linux CI jobs passed. [WP-15](wp/WP-15-user-memory-transfers.md)
+records the bounded user-copy and entry-policy implementation. [WP-16](wp/WP-16-syscall-abi-contract.md)
+continues #40 with the current ABI contract, deterministic shared responses and actual shared
+process exit. The execution stages above remain unchanged; resource ownership, SDK and
+isolated applications are still unfinished.
+
 Record the issue, scope/ADR, prerequisites, commit/PR, exact configuration/commands, observed
 results, resource/performance limits, regression/negative cases, and remaining limitations.
 Host checks cannot close a hardware-verification criterion; two-boot survival cannot close a

@@ -10,7 +10,8 @@ The initial slice was published in `1108fa5`; all four jobs passed in
 [the Linux CI run](https://github.com/Heptapus-Open-Code-Organization/QOS/actions/runs/41210140971).
 [WP-15](WP-15-user-memory-transfers.md) extends the guest contract with checked
 user copies, Ring-3 write/exit and max/qemu64 CPU profiles (v2), then entry flags/negative
-Ring-3 tests (current v3). The v1 contract below records the
+Ring-3 tests (v3). [WP-16](WP-16-syscall-abi-contract.md) adds the current v4 ABI checks.
+The v1 contract below records the
 original slice; the current marker list is in `qos-verify` and WP-15.
 
 ## Problem and first slice

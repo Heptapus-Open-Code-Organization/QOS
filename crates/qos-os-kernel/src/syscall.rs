@@ -9,7 +9,7 @@ use x86_64::structures::idt::InterruptStackFrame;
 use crate::quantum::{self, Circuit, QuantumState, parse_qasm};
 use crate::vga;
 
-pub const ABI_CALL_ADDR: u64 = 0x0000_0000_4001_0000;
+pub const ABI_CALL_ADDR: u64 = qos_abi::shm::CALL_ADDR;
 
 type ShmCall = qos_abi::shm::ShmCall;
 
@@ -737,14 +737,6 @@ pub fn process_quantum_work() {
 
 pub static SYSCALL_COUNT: AtomicU64 = AtomicU64::new(0);
 
-#[repr(u64)]
-pub enum SyscallNumber {
-    // Reserved for Milestone 2.
-    Nop = 0,
-    WriteChar = 1,
-    Exit = 2,
-}
-
 // Simplified syscall handler without naked_asm
 #[no_mangle]
 pub extern "x86-interrupt" fn syscall_interrupt_handler(_stack_frame: InterruptStackFrame) {
@@ -806,9 +798,8 @@ const _: () = {
     assert!(core::mem::size_of::<SyscallRegs>() == 160);
 };
 
-pub const SYS_EXIT: u64 = 0;
-pub const SYS_WRITE: u64 = 1;
-pub const SYS_GETTICKS: u64 = 2;
+pub use qos_abi::reg::{SYS_EXIT, SYS_WRITE, SYS_GETTICKS, SYS_GET_ABI_VERSION};
+const _: () = assert!(qos_abi::reg::MAX_WRITE == crate::uaccess::MAX_COPY);
 
 #[cfg(feature = "userabi")]
 const _: () = {
@@ -912,15 +903,18 @@ pub extern "C" fn syscall_dispatch(frame: u64) -> u64 {
                 regs.rax = len as u64;
             } else {
                 crate::serial_println!("[regabi] SYS_WRITE rejected (bad user ptr {:#x}+{})", ptr, len);
-                regs.rax = u64::MAX; // -1
+                regs.rax = qos_abi::reg::ERROR;
             }
         }
         SYS_GETTICKS => {
             regs.rax = crate::interrupts::TICKS.load(Ordering::Relaxed);
         }
+        SYS_GET_ABI_VERSION => {
+            regs.rax = qos_abi::reg::ABI_VERSION;
+        }
         other => {
             crate::serial_println!("[regabi] unknown syscall {}", other);
-            regs.rax = u64::MAX;
+            regs.rax = qos_abi::reg::ERROR;
         }
     }
     frame
@@ -930,21 +924,19 @@ pub extern "C" fn syscall_dispatch(frame: u64) -> u64 {
 fn handle_userdemo_abi() -> u64 {
     // Snapshot only after validating both input and output permissions. The current wire
     // frame is 48 bytes of integers; return fields are encoded explicitly below.
-    let mut raw = [0u8; core::mem::size_of::<ShmCall>()];
+    let mut raw = [0u8; qos_abi::shm::CALL_SIZE];
     if crate::uaccess::validate(ABI_CALL_ADDR, raw.len(), crate::uaccess::Access::Write).is_err()
         || crate::uaccess::copy_from_user(ABI_CALL_ADDR, &mut raw).is_err()
     {
         crate::serial_println!("syscall abi: rejected inaccessible call frame");
         return 0;
     }
-    let mut call = unsafe { core::ptr::read_unaligned(raw.as_ptr() as *const ShmCall) };
+    let mut call = ShmCall::from_le_bytes(&raw);
     let root = crate::memory::current_cr3_frame();
     let result = handle_userdemo_call(&mut call);
     // A scheduled legacy exit may already have switched address spaces.
     if crate::memory::current_cr3_frame() == root {
-        raw[8..12].copy_from_slice(&call.status.to_le_bytes());
-        raw[16..24].copy_from_slice(&call.ret0.to_le_bytes());
-        raw[24..32].copy_from_slice(&call.ret1.to_le_bytes());
+        call.write_response(&mut raw);
         if crate::uaccess::copy_to_user(ABI_CALL_ADDR, &raw).is_err() {
             crate::serial_println!("syscall abi: rejected inaccessible response frame");
         }
@@ -954,6 +946,8 @@ fn handle_userdemo_abi() -> u64 {
 
 #[cfg(feature = "userabi")]
 fn handle_userdemo_call(call: &mut ShmCall) -> u64 {
+    // Never return caller-supplied or stale result values from an earlier operation.
+    call.reset_response();
     // Minimal shared-memory ABI:
     // User fills `qos_abi::shm::ShmCall` at ABI_CALL_ADDR and triggers int 0x80.
     // Kernel reads op and writes status/ret*.
@@ -1419,13 +1413,6 @@ fn handle_userdemo_call(call: &mut ShmCall) -> u64 {
             crate::serial_println!("syscall abi: Exit");
             vga::println!("exit");
 
-            #[cfg(feature = "verify")]
-            {
-                crate::serial_println!("VERIFY: quantum demo ok (ring3), exiting QEMU");
-                crate::qemu::exit(0x10);
-            }
-
-            #[cfg(not(feature = "verify"))]
             {
                 let code = unsafe { core::ptr::read_volatile(&call.arg0) };
 

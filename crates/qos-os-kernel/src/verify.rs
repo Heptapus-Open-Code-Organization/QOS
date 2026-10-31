@@ -1,4 +1,4 @@
-//! Bounded boot smoke checks. This does not stand in for Ring-3 or persistence tests.
+//! Bounded boot and Ring-3 smoke checks. Persistence and full process tests remain open.
 
 fn check(ok: bool, name: &str) {
     if !ok {
@@ -9,7 +9,7 @@ fn check(ok: bool, name: &str) {
 }
 
 pub fn run() -> ! {
-    crate::serial_println!("QOS_VERIFY BEGIN v3");
+    crate::serial_println!("QOS_VERIFY BEGIN v4");
     check(crate::framebuffer::active(), "boot-framebuffer");
     let (wx, mapped) = crate::security::wx_audit();
     check(wx == 0 && mapped > 0, "wx");
@@ -43,7 +43,11 @@ pub fn run() -> ! {
         probe && crate::security::entry_probe_passed(),
         "entry-policy",
     );
-    crate::serial_println!("QOS_VERIFY COMPLETE v3");
+    check(
+        verify_ring3(crate::user::spawn_ring3_abi_probe, 10),
+        "abi-contract",
+    );
+    crate::serial_println!("QOS_VERIFY COMPLETE v4");
     crate::qemu::exit(0x10);
 }
 

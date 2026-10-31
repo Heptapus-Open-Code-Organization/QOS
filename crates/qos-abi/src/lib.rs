@@ -4,6 +4,9 @@ extern crate alloc;
 
 use alloc::{string::String, vec::Vec};
 
+pub mod reg;
+mod shm_wire;
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +18,10 @@ pub const ABI_VERSION: u32 = 1;
 /// This is a small, allocation-free wire format intended for bare-metal.
 /// Higher-level `QosRequest/QosResponse` can be layered on top for hosted JSON.
 pub mod shm {
+    /// Fixed user virtual address of the current shared call page (int 0x80).
+    pub const CALL_ADDR: u64 = 0x4001_0000;
+    pub const CALL_SIZE: usize = 48;
+
     /// Shared-memory ABI version. Must match `ABI_VERSION`.
     pub const SHM_ABI_VERSION: u32 = super::ABI_VERSION;
 

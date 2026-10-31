@@ -38,6 +38,7 @@ the code and the git history.
 | [0013](0013-graphics-path-vga-then-vesa.md) | Graphics path — VGA Mode 13h now, VESA later | Accepted |
 | [0023](0023-resident-user-memory-transfers.md) | Bounded resident user-memory transfers | Accepted for single BSP |
 | [0024](0024-interrupt-entry-flags.md) | Normalize live DF/AC before kernel Rust entry | Accepted for installed gates |
+| [0025](0025-current-syscall-abi-contract.md) | Current v1 syscall namespaces and deterministic responses | Accepted for preemptive ABI |
 
 ## Implementation order
 
