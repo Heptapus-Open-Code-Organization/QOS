@@ -487,6 +487,99 @@ pub fn spawn_ring3_regabi() -> Ring3Handle {
     spawn_ring3(&prog)
 }
 
+#[cfg(feature = "verify")]
+core::arch::global_asm!(
+    r#"
+    .section .rodata.qos_entry_probe,"a"
+    .p2align 4
+    .global qos_entry_probe_start
+qos_entry_probe_start:
+    pushfq
+    orq $263168, (%rsp)       # user DF|AC set; stack operands stay naturally aligned
+    popfq
+
+    .macro qos_probe_flags
+    pushfq
+    pop %r10
+    andq $263168, %r10
+    cmpq $263168, %r10
+    jne qos_entry_probe_fail
+    .endm
+
+    .macro qos_probe_error pointer, count
+    movabsq $\pointer, %rdi
+    movq $\count, %rsi
+    mov $1, %eax
+    int $0x81
+    cmpq $-1, %rax
+    jne qos_entry_probe_fail
+    qos_probe_flags
+    .endm
+
+    # Timer preemption must also enter with clean live flags and restore the user flags.
+    mov $2, %eax
+    int $0x81
+    qos_probe_flags
+    lea 4(%rax), %r12
+qos_entry_probe_wait:
+    mov $2, %eax
+    int $0x81
+    qos_probe_flags
+    cmp %r12, %rax
+    jb qos_entry_probe_wait
+
+    qos_probe_error 0, 1
+    qos_probe_error 0x8000000000, 1
+    qos_probe_error 0x800000000000, 1
+    qos_probe_error 0xffffffffffffffff, 2
+    qos_probe_error 0xb8000, 1
+    qos_probe_error 0x40000fff, 2
+    qos_probe_error 0x40000000, 4097
+
+    # The shared ABI uses the same entry policy and returns normally to this process.
+    movl $1, 0x40010000
+    movl $0, 0x40010004
+    int $0x80
+    qos_probe_flags
+    cmpl $0, 0x40010008
+    jne qos_entry_probe_fail
+    cmpq $1, 0x40010010
+    jne qos_entry_probe_fail
+
+    lea qos_entry_probe_message(%rip), %rdi
+    mov $(qos_entry_probe_message_end-qos_entry_probe_message), %esi
+    mov $1, %eax
+    int $0x81
+    cmp $(qos_entry_probe_message_end-qos_entry_probe_message), %rax
+    jne qos_entry_probe_fail
+    qos_probe_flags
+    xor %eax, %eax
+    int $0x81
+qos_entry_probe_fail:
+    ud2
+qos_entry_probe_message:
+    .ascii "ring3 negative buffers and entry flags passed\n"
+qos_entry_probe_message_end:
+    .global qos_entry_probe_end
+qos_entry_probe_end:
+    "#,
+    options(att_syntax)
+);
+
+#[cfg(feature = "verify")]
+pub fn spawn_ring3_entry_probe() -> Ring3Handle {
+    extern "C" {
+        static qos_entry_probe_start: u8;
+        static qos_entry_probe_end: u8;
+    }
+    let start = core::ptr::addr_of!(qos_entry_probe_start);
+    let length = core::ptr::addr_of!(qos_entry_probe_end) as usize - start as usize;
+    assert!(length <= crate::uaccess::MAX_COPY);
+    // The linker-delimited payload is immutable and self-contained; RIP-relative data
+    // references remain valid when copied into the private Ring-3 code page.
+    spawn_ring3(unsafe { core::slice::from_raw_parts(start, length) })
+}
+
 /// Build a Ring-3 process running `payload` in its own address space, ready to hand to the
 /// preemptive scheduler (Phase 2.1b).
 fn spawn_ring3(payload: &[u8]) -> Ring3Handle {
@@ -505,10 +598,7 @@ fn spawn_ring3(payload: &[u8]) -> Ring3Handle {
         // Copy the payload into the code page. It is only mapped in the new CR3, so switch
         // there to write, then return to the kernel CR3.
         let saved = memory::switch_cr3(cr3);
-        unsafe {
-            let dst: *mut u8 = VirtAddr::new(USER_CODE_START).as_mut_ptr();
-            core::ptr::copy_nonoverlapping(payload.as_ptr(), dst, payload.len());
-        }
+        crate::uaccess::copy_to_user(USER_CODE_START, payload).expect("load bounded Ring-3 payload");
         memory::switch_cr3(saved);
 
         // W^X (Phase 2.3): after loading, demote the code page to read-execute (drop WRITABLE).

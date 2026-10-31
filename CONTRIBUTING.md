@@ -17,7 +17,7 @@ Linux toolchain.
 ## Build, run, test
 
 ```sh
-cargo test -p qos-abi -p qos-gfx -p qos-ui -p qos-driver -p qos-acpi -p qos-core -p qos-verify --features qos-core/std
+cargo test -p qos-abi -p qos-gfx -p qos-ui -p qos-driver -p qos-acpi -p qos-core -p qos-verify -p qos-uaccess --features qos-core/std
 cargo os-build                          # build the bare-metal kernel
 cargo image                             # build the interactive UEFI image
 cargo os-verify                         # strict UEFI/frame/W^X/real-Bell smoke

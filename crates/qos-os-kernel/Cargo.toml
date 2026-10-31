@@ -18,13 +18,14 @@ qos-gfx = { path = "../qos-gfx" }
 qos-ui = { path = "../qos-ui" }
 qos-driver = { path = "../qos-driver" }
 qos-acpi = { path = "../qos-acpi" }
+qos-uaccess = { path = "../qos-uaccess" }
 libm = "0.2"
 
 [features]
 default = ["userabi"]  # Enable user mode ABI by default
 userabi = []
 userdemo = ["userabi"]
-verify = []
+verify = ["userabi"]
 fat = []  # Optional FAT16 filesystem support at /fat mount
 
 [build-dependencies]

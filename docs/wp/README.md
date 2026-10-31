@@ -33,7 +33,8 @@ Canonical open issues #19-#28 supersede their already-closed duplicates #29-#38.
 | [WP-11](WP-11-installer-oobe.md) | Installer & first-boot setup: language, user, disk, login | E-90 | — | [#10](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/10) | 🟡 in progress |
 | [WP-12](WP-12-cloud-qpu-api.md) | Cloud QPU connectivity: QHAL backends + provider API | E-80/81 | ADR-0011+ | [#12](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/12) | 🔴 blocked on WP-10 |
 | [WP-13](WP-13-quantum-safe-security.md) | Quantum-safe security: PQC, kernel crypto, secure channels | E-54 | (new ADR) | [#19](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/19) | 🔴 not started |
-| [WP-14](WP-14-verification-gates.md) | Truthful UEFI verification and CI gates | E-90 | — | [#25](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/25) | 🟡 first slice implemented locally |
+| [WP-14](WP-14-verification-gates.md) | Truthful UEFI verification and CI gates | E-90 | — | [#25](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/25) | 🟡 first slice published; Linux CI passed |
+| [WP-15](WP-15-user-memory-transfers.md) | Checked resident user-memory transfers | E-30/31 | ADR-0023 | [#40](https://github.com/Heptapus-Open-Code-Organization/QOS/issues/40) | 🟡 bounded copy slice |
 
 All remaining epics are tracked as detailed [GitHub issues](https://github.com/Heptapus-Open-Code-Organization/QOS/issues)
 with milestones M1–M4: PCIe ECAM + MSI (#8) · block layer + NVMe/virtio-blk (#9) · VMM

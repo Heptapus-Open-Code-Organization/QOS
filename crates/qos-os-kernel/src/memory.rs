@@ -1,6 +1,7 @@
 use bootloader_api::info::{MemoryRegionKind, MemoryRegions};
 use lazy_static::lazy_static;
 use spin::Mutex;
+use spin::Once;
 use alloc::vec::Vec;
 use x86_64::{
     PhysAddr, VirtAddr,
@@ -18,9 +19,12 @@ pub struct MemoryContext {
 
 lazy_static! {
     static ref MEMORY_CTX: Mutex<Option<MemoryContext>> = Mutex::new(None);
-    static ref PHYS_OFFSET: Mutex<Option<VirtAddr>> = Mutex::new(None);
     static ref KERNEL_CR3: Mutex<Option<PhysFrame<Size4KiB>>> = Mutex::new(None);
 }
+
+// Immutable after boot; reads from syscall/interrupt context must not spin on a lock
+// held by an interrupted task.
+static PHYS_OFFSET: Once<VirtAddr> = Once::new();
 
 pub unsafe fn init(physical_memory_offset: VirtAddr) -> OffsetPageTable<'static> {
     let level_4_table = active_level_4_table(physical_memory_offset);
@@ -28,7 +32,7 @@ pub unsafe fn init(physical_memory_offset: VirtAddr) -> OffsetPageTable<'static>
 }
 
 pub unsafe fn init_global(physical_memory_offset: VirtAddr, memory_regions: &'static MemoryRegions) {
-    *PHYS_OFFSET.lock() = Some(physical_memory_offset);
+    PHYS_OFFSET.call_once(|| physical_memory_offset);
     let (kcr3, _) = Cr3::read();
     *KERNEL_CR3.lock() = Some(kcr3);
 
@@ -41,7 +45,7 @@ pub unsafe fn init_global(physical_memory_offset: VirtAddr, memory_regions: &'st
 }
 
 pub fn phys_offset() -> VirtAddr {
-    PHYS_OFFSET.lock().expect("phys offset not initialized")
+    *PHYS_OFFSET.get().expect("phys offset not initialized")
 }
 
 pub fn kernel_cr3_frame() -> PhysFrame<Size4KiB> {

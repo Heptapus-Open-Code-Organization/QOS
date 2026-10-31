@@ -42,6 +42,13 @@ test. `no_std` and interactive-image builds passed. Publication and Linux GitHub
 results are tracked separately on #25. Process, persistence, input and worker
 load integration acceptance remains open; the initial audit evidence above is historical.
 
+Publication update: `1108fa5` was pushed to main and all four jobs in
+[its Linux CI run](https://github.com/Heptapus-Open-Code-Organization/QOS/actions/runs/41210140971)
+passed. [WP-15](wp/WP-15-user-memory-transfers.md) records the subsequent #40 bounded resident
+copy increment on `feat/syscall-user-memory`, including actual page-permission/cross-page/VFS
+checks and Ring-3 register write/exit. The new v2 smoke runs max and qemu64 CPU profiles; this
+does not close the remaining ABI, SMP/VM pinning, resource or legacy-loader acceptance.
+
 ## Initial support envelope
 
 The proposed first profile is x86-64 UEFI on a documented QEMU+OVMF configuration: framebuffer,

@@ -36,6 +36,8 @@ the code and the git history.
 | [0011](0011-cloud-connectivity-tls-proxy.md) | Quantum cloud connectivity via a host TLS proxy | Accepted |
 | [0012](0012-desktop-ux-layer.md) | Desktop / UX layer | Accepted |
 | [0013](0013-graphics-path-vga-then-vesa.md) | Graphics path — VGA Mode 13h now, VESA later | Accepted |
+| [0023](0023-resident-user-memory-transfers.md) | Bounded resident user-memory transfers | Accepted for single BSP |
+| [0024](0024-interrupt-entry-flags.md) | Normalize live DF/AC before kernel Rust entry | Accepted for installed gates |
 
 ## Implementation order
 

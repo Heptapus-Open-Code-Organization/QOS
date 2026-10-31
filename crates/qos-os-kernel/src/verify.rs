@@ -9,7 +9,7 @@ fn check(ok: bool, name: &str) {
 }
 
 pub fn run() -> ! {
-    crate::serial_println!("QOS_VERIFY BEGIN v1");
+    crate::serial_println!("QOS_VERIFY BEGIN v3");
     check(crate::framebuffer::active(), "boot-framebuffer");
     let (wx, mapped) = crate::security::wx_audit();
     check(wx == 0 && mapped > 0, "wx");
@@ -32,6 +32,45 @@ pub fn run() -> ! {
         })
         .unwrap_or(false);
     check(ok, "quantum-bell");
-    crate::serial_println!("QOS_VERIFY COMPLETE v1");
+    check(crate::uaccess::verify_mappings(), "user-copy");
+    check(
+        verify_ring3(crate::user::spawn_ring3_regabi, 2),
+        "ring3-write-exit",
+    );
+    crate::security::reset_entry_probe();
+    let probe = verify_ring3(crate::user::spawn_ring3_entry_probe, 12);
+    check(
+        probe && crate::security::entry_probe_passed(),
+        "entry-policy",
+    );
+    crate::serial_println!("QOS_VERIFY COMPLETE v3");
     crate::qemu::exit(0x10);
+}
+
+fn verify_ring3(spawn: fn() -> crate::user::Ring3Handle, minimum_calls: u64) -> bool {
+    use core::sync::atomic::Ordering;
+    crate::kthread::reset();
+    let user = spawn();
+    crate::kthread::adopt_user(user.saved_rsp, user.cr3, user.rsp0_top);
+    let before = crate::syscall::SYSCALL_COUNT.load(Ordering::Relaxed);
+    crate::kthread::arm();
+    let start = crate::interrupts::TICKS.load(Ordering::Relaxed);
+    while !crate::kthread::all_finished()
+        && crate::interrupts::TICKS
+            .load(Ordering::Relaxed)
+            .wrapping_sub(start)
+            < 200
+    {
+        x86_64::instructions::interrupts::enable_and_hlt();
+    }
+    let passed = crate::kthread::all_finished()
+        && crate::syscall::SYSCALL_COUNT.load(Ordering::Relaxed) >= before + minimum_calls;
+    crate::kthread::disarm();
+    crate::kthread::reset();
+    crate::memory::switch_cr3(user.cr3);
+    let root = crate::user::cleanup_user_addrspace_and_get_cr3();
+    crate::memory::switch_to_kernel_cr3();
+    crate::memory::with_ctx(|_, allocator| allocator.deallocate_frame(root));
+    crate::user::clear_ring3_test_stacks();
+    passed
 }

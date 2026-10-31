@@ -19,6 +19,35 @@ const F_SMAP: u8 = 1 << 3;
 /// Bitmask of the protections that are active (filled in by [`init`]).
 static ACTIVE: AtomicU8 = AtomicU8::new(0);
 
+#[cfg(feature = "verify")]
+static ENTRY_SEEN: AtomicU8 = AtomicU8::new(0);
+#[cfg(feature = "verify")]
+static ENTRY_BAD: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+#[cfg(feature = "verify")]
+pub fn reset_entry_probe() {
+    ENTRY_SEEN.store(0, Ordering::SeqCst);
+    ENTRY_BAD.store(false, Ordering::SeqCst);
+}
+
+/// Called only after the assembly gate has normalized live DF/AC. Saved flags must stay
+/// intact, so the user can observe them again after iretq.
+#[cfg(feature = "verify")]
+pub fn record_entry_probe(source: u8, saved_flags: u64, saved_cs: u64) {
+    const MASK: u64 = (1 << 10) | (1 << 18);
+    if x86_64::registers::rflags::read_raw() & MASK != 0 {
+        ENTRY_BAD.store(true, Ordering::SeqCst);
+    }
+    if saved_cs & 3 == 3 && saved_flags & MASK == MASK {
+        ENTRY_SEEN.fetch_or(source, Ordering::SeqCst);
+    }
+}
+
+#[cfg(feature = "verify")]
+pub fn entry_probe_passed() -> bool {
+    ENTRY_SEEN.load(Ordering::SeqCst) == 7 && !ENTRY_BAD.load(Ordering::SeqCst)
+}
+
 /// Enable every supported protection and record + log the result. Call once at boot (after
 /// paging is up; before user-facing subsystems).
 pub fn init() {

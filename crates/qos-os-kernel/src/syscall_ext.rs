@@ -146,6 +146,7 @@ pub const SEEK_END: i32 = 2;
 pub const ENOENT: i64 = -2;
 pub const EBADF: i64 = -9;
 pub const EACCES: i64 = -13;
+pub const EFAULT: i64 = -14;
 pub const EINVAL: i64 = -22;
 pub const EMFILE: i64 = -24;
 pub const ENOSPC: i64 = -28;
@@ -386,23 +387,27 @@ pub fn handle_syscall(nr: u64, arg1: u64, arg2: u64, arg3: u64) -> i64 {
     match nr {
         syscall_nr::SYS_READ => {
             let fd = arg1 as usize;
-            let buf_ptr = arg2 as *mut u8;
             let count = arg3 as usize;
-            if buf_ptr.is_null() {
-                return EINVAL;
+            if count > crate::uaccess::MAX_COPY { return EINVAL; }
+            if crate::uaccess::validate(arg2, count, crate::uaccess::Access::Write).is_err() {
+                return EFAULT;
             }
-            let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr, count) };
-            sys_read(fd, buf)
+            let mut buf = [0u8; crate::uaccess::MAX_COPY];
+            let read = sys_read(fd, &mut buf[..count]);
+            if read > 0 && crate::uaccess::copy_to_user(arg2, &buf[..read as usize]).is_err() {
+                return EFAULT;
+            }
+            read
         }
         syscall_nr::SYS_WRITE => {
             let fd = arg1 as usize;
-            let buf_ptr = arg2 as *const u8;
             let count = arg3 as usize;
-            if buf_ptr.is_null() {
-                return EINVAL;
+            if count > crate::uaccess::MAX_COPY { return EINVAL; }
+            let mut buf = [0u8; crate::uaccess::MAX_COPY];
+            if crate::uaccess::copy_from_user(arg2, &mut buf[..count]).is_err() {
+                return EFAULT;
             }
-            let buf = unsafe { core::slice::from_raw_parts(buf_ptr, count) };
-            sys_write(fd, buf)
+            sys_write(fd, &buf[..count])
         }
         syscall_nr::SYS_CLOSE => sys_close(arg1 as usize),
         syscall_nr::SYS_LSEEK => sys_lseek(arg1 as usize, arg2 as i64, arg3 as i32),
